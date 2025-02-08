@@ -27,27 +27,20 @@ public abstract class MinecraftClientMixin {
     @Unique
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
+    // runTick里面可能包着runTick，导致意外运行顺序，需要注意
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;setErrorSection(Ljava/lang/String;)V", ordinal = 0))
     private void beforeRunTick(boolean bl, CallbackInfo ci) {
         ReflexMod.getScheduler().Wait();
 
         cpuTimeCollect.startCollect();
-    }
 
-    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/Util;getNanos()J", // 目标方法签名
-            ordinal = 0 // 如果多次调用 clear，用 ordinal 指定第几次调用
-    ))
-    private void beforeRender(boolean bl, CallbackInfo ci) {
         ReflexMod.getScheduler().renderQueueAdd();
-    }
-
-    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V"))
-    private void afterRender(CallbackInfo ci) {
-        ReflexMod.getScheduler().renderQueueEndInsert();
     }
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V", shift = At.Shift.AFTER))
     private void afterFlush(CallbackInfo ci) {
+        ReflexMod.getScheduler().renderQueueEndInsert();
+
         cpuTimeCollect.endCollect();
         Long cpuTime = cpuTimeCollect.getCpuTime();
         cpuTimeCollect.reset();

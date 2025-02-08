@@ -1,15 +1,18 @@
 package com.example;
 
 public class CpuTimeCollector {
+
     public Long startTime = null;
     public Long endTime = null;
 
     public void startCollect() {
         startTime = System.nanoTime();
+        lastAction = CpuTimeCollectorAction.START_COLLECT;
     }
 
     public void endCollect() {
         endTime = System.nanoTime();
+        lastAction = CpuTimeCollectorAction.END_COLLECT;
     }
 
     public Long getCpuTime() {
@@ -23,4 +26,11 @@ public class CpuTimeCollector {
         startTime = null;
         endTime = null;
     }
+
+    public CpuTimeCollectorAction lastAction = null;
+}
+
+enum CpuTimeCollectorAction {
+    START_COLLECT,
+    END_COLLECT
 }

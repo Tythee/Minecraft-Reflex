@@ -26,11 +26,19 @@ public class ConfigScreen {
 
         // 添加一个布尔型开关选项，名称为“reflex是否开启”
         generalCategory.addEntry(
-                entryBuilder.startBooleanToggle(Component.nullToEmpty("reflex是否开启"), ModConfig.INSTANCE.isReflexEnabled())
+                entryBuilder
+                        .startBooleanToggle(Component.nullToEmpty("reflex是否开启"), ModConfig.INSTANCE.isReflexEnabled())
                         .setDefaultValue(true)
                         .setSaveConsumer(ModConfig.INSTANCE::setReflexEnabled)
-                        .build()
-        );
+                        .build());
+
+        // 添加一个数值选项，名称为“减少等待时间”
+        generalCategory.addEntry(
+                entryBuilder
+                        .startLongField(Component.nullToEmpty("减少等待时间"), ModConfig.INSTANCE.getReduceWaitTime())
+                        .setDefaultValue(0)
+                        .setSaveConsumer(ModConfig.INSTANCE::setReduceWaitTime)
+                        .build());
 
         return builder.build();
     }

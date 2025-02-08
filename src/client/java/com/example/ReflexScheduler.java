@@ -1,21 +1,25 @@
 package com.example;
 
 import com.example.config.ModConfig;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.Iterator;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import static com.example.Reflex.MOD_ID;
 
 public class ReflexScheduler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
     // 指数平滑参数
-    private float alpha = 0.85f;
+    private final float alpha = 0.85f;
     private Long estimateCpuTime = null;// CPU 时间指数平滑
 
     // GPU 时间滑动窗口
-    private int gpuWindowSize = 60;
+    private final int gpuWindowSize = 60;
     private final Deque<Long> gpuTimesHistory = new ArrayDeque<>();
     private final float[] gpuWeights;
 
@@ -65,8 +69,18 @@ public class ReflexScheduler {
 
     private Long calculateWaitTime() {
         // 更新gpuTimeCollectorDeque元素的endQuery
-        for (GpuTimeCollector gpuTimeCollector : gpuTimeCollectorDeque) {
-            gpuTimeCollector.endQueryCheck();
+        // for (GpuTimeCollector gpuTimeCollector : gpuTimeCollectorDeque) {
+        // gpuTimeCollector.endQueryCheck();
+        // }
+
+        Iterator<GpuTimeCollector> gpuTimeCollectorIterator = gpuTimeCollectorDeque.iterator();
+        while (gpuTimeCollectorIterator.hasNext()) {
+            GpuTimeCollector gpuTimeCollector = gpuTimeCollectorIterator.next();
+            if (gpuTimeCollector.endQueryInserted) {
+                gpuTimeCollector.endQueryCheck();
+            } else {
+                gpuTimeCollectorIterator.remove();
+            }
         }
 
         if (gpuTimeCollectorDeque.isEmpty()) {
@@ -79,22 +93,16 @@ public class ReflexScheduler {
             long waitTime;
             if (gpuTimeCollectorDeque.getLast().startTimeGpu == null) {
                 waitTime = getEstimateGpuTime() * gpuTimeCollectorDeque.size() - estimateCpuTime;
-
-                System.out.println("==================Estimate Gpu Time: " + getEstimateGpuTime());
-                System.out.println("==================Estimate Cpu Time: " + estimateCpuTime);
-                System.out.println("==================waitTime: " + waitTime);
-
             } else {
                 waitTime = gpuTimeCollectorDeque.getLast().startTimeSystem
                         + getEstimateGpuTime() * gpuTimeCollectorDeque.size()
                         - estimateCpuTime - System.nanoTime();
-
-                System.out.println("Estimate Gpu Time: " + getEstimateGpuTime());
-                System.out.println("Estimate Cpu Time: " + estimateCpuTime);
-                System.out.println("waitTime: " + waitTime);
+                // System.out.println("Estimate Gpu Time: " + getEstimateGpuTime());
+                // System.out.println("Estimate Cpu Time: " + estimateCpuTime);
+                // System.out.println("waitTime: " + waitTime);
             }
 
-            waitTime -= 1000000;// 减少等待时间，防止睡过头
+            waitTime -= ModConfig.INSTANCE.getReduceWaitTime();// 减少等待时间，防止睡过头
             if (waitTime > 0) {
                 return waitTime;
             } else {
@@ -103,65 +111,90 @@ public class ReflexScheduler {
         }
     }
 
-    Lock lock = new ReentrantLock();
-    Condition condition = lock.newCondition();
-
     public void Wait() {
-        lock.lock();
-        try {
-            while (true) {
-                Long waitTime = calculateWaitTime();
-                if (waitTime != null && ModConfig.INSTANCE.isReflexEnabled()) {
-                    boolean signaled = condition.await(waitTime, TimeUnit.NANOSECONDS);
-                } else {
-                    break;
-                }
+        while (true) {
+            Long waitTime = calculateWaitTime();
+            if (waitTime != null && ModConfig.INSTANCE.isReflexEnabled()) {
+                GLFW.glfwWaitEventsTimeout(waitTime / 1e9);
+            } else {
+                break;
             }
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } finally {
-            lock.unlock();
         }
     }
 
-    private GpuTimeCollector lastGpuTimeCollector = null;
+    private GpuTimeCollector currentOperateGpuTimeCollector = null;
+    private RenderQueueAction lastRenderQueueAction = null;
 
     public void renderQueueAdd() {
+        if (lastRenderQueueAction != RenderQueueAction.START_WAIT && lastRenderQueueAction != null) {
+            gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
+            currentOperateGpuTimeCollector = null;
+            lastRenderQueueAction = null;
+        }
+
+//        if (lastRenderQueueAction != RenderQueueAction.START_WAIT && lastRenderQueueAction != null) {
+//            LOGGER.error("renderQueueAdd called must after renderQueueStartWait or null",
+//                    new IllegalStateException("renderQueueAdd called must after renderQueueStartWait or null"));
+//            throw new IllegalStateException("renderQueueAdd called must after renderQueueStartWait or null");
+//        }
+
         GpuTimeCollector gpuTimeCollector = new GpuTimeCollector();
-        gpuTimeCollector.setCallback(() -> {
-            lock.lock();
-            try {
-                condition.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }, () -> {
-            lock.lock();
-            try {
-                condition.signalAll();
-            } finally {
-                lock.unlock();
-            }
-            updateGpuTime(gpuTimeCollector.endTimeGpu - gpuTimeCollector.startTimeGpu);
-            gpuTimeCollectorDeque.remove(gpuTimeCollector);
-        });
+        gpuTimeCollector.setCallback(
+                null, () -> {
+                    updateGpuTime(gpuTimeCollector.endTimeGpu - gpuTimeCollector.startTimeGpu);
+                    gpuTimeCollectorDeque.remove(gpuTimeCollector);
+                });
+
         gpuTimeCollector.startQueryInsert();
+
         gpuTimeCollectorDeque.addFirst(gpuTimeCollector);
-        lastGpuTimeCollector = gpuTimeCollector;
+
+        currentOperateGpuTimeCollector = gpuTimeCollector;
+        lastRenderQueueAction = RenderQueueAction.ADD;
     }
 
     public void renderQueueEndInsert() {
-        if (lastGpuTimeCollector == null) {
-            throw new IllegalStateException("renderQueueEndInsert called before renderQueueAdd");
+        if (lastRenderQueueAction != RenderQueueAction.ADD) {
+            gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
+            currentOperateGpuTimeCollector = null;
+            lastRenderQueueAction = null;
+            return;
         }
-        lastGpuTimeCollector.endQueryInsert();
+
+//        if (lastRenderQueueAction != RenderQueueAction.ADD) {
+//            LOGGER.error("renderQueueEndInsert called must after renderQueueAdd",
+//                    new IllegalStateException("renderQueueEndInsert called must after renderQueueAdd"));
+//            throw new IllegalStateException("renderQueueEndInsert called must after renderQueueAdd");
+//        }
+
+        currentOperateGpuTimeCollector.endQueryInsert();
+
+        lastRenderQueueAction = RenderQueueAction.END_INSERT;
     }
 
     public void renderQueueStartWait() {
-        if (lastGpuTimeCollector == null) {
-            throw new IllegalStateException("renderQueueStartWait called before renderQueueAdd");
+        if (lastRenderQueueAction != RenderQueueAction.END_INSERT) {
+            gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
+            currentOperateGpuTimeCollector = null;
+            lastRenderQueueAction = null;
+            return;
         }
-        lastGpuTimeCollector.startQueryCheck();
-        lastGpuTimeCollector = null;
+
+//        if (lastRenderQueueAction != RenderQueueAction.END_INSERT) {
+//            LOGGER.error("renderQueueStartWait called must after renderQueueEndInsert",
+//                    new IllegalStateException("renderQueueStartWait called must after renderQueueEndInsert"));
+//            throw new IllegalStateException("renderQueueStartWait called must after renderQueueEndInsert");
+//        }
+
+        currentOperateGpuTimeCollector.startQueryCheck();
+        currentOperateGpuTimeCollector = null;
+
+        lastRenderQueueAction = RenderQueueAction.START_WAIT;
     }
+}
+
+enum RenderQueueAction {
+    ADD,
+    END_INSERT,
+    START_WAIT
 }
