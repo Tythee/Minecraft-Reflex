@@ -21,9 +21,12 @@ public class GpuTimeCollector {
     private Runnable startCallback = null;
     private Runnable endCallback = null;
 
-    GpuTimeCollector(Runnable startCallback, Runnable endCallback) {
-        this.startCallback = startCallback;
-        this.endCallback = endCallback;
+    long gpuToSystem(long gpu) {
+        long[] t = new long[1];
+        GL33C.glGetInteger64v(GL33C.GL_TIMESTAMP, t);
+        long system = System.nanoTime();
+        long gpuToSystemOffset = system - t[0];
+        return gpu + gpuToSystemOffset;
     }
 
     GpuTimeCollector() {
@@ -38,15 +41,29 @@ public class GpuTimeCollector {
         startTimeQuery = GL32C.glGenQueries();
         GL33C.glQueryCounter(startTimeQuery, GL33C.GL_TIMESTAMP);
         startQueryInserted = true;
+        if (startTimeQuery == null) {
+            throw new RuntimeException("Could not find query insertion time");
+        }
     }
 
     public void startQueryCheck() {
-        startTimeGpu = GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT);// 等待GPU开始渲染
-        startTimeSystem = System.nanoTime();
-        GL33C.glDeleteQueries(startTimeQuery);
-        startTimeQuery = null;
-        if (startCallback != null) {
-            startCallback.run();
+        if (!startQueryInserted) {
+            LOGGER.error("startQueryInsert() must be called before startQueryCheck()",
+                    new IllegalStateException("startQueryInsert() must be called before startQueryCheck()"));
+            throw new IllegalStateException("startQueryInsert() must be called before startQueryCheck()");
+        }
+
+        if (startTimeGpu == null) {
+            if (GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT_AVAILABLE) == GL_TRUE) {
+                startTimeGpu = GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT);
+                GL32C.glDeleteQueries(startTimeQuery);
+                startTimeQuery = null;
+
+                startTimeSystem = gpuToSystem(startTimeGpu);
+                if (startCallback != null) {
+                    startCallback.run();
+                }
+            }
         }
     }
 
@@ -62,10 +79,11 @@ public class GpuTimeCollector {
 
         endTimeQuery = GL32C.glGenQueries();
         GL33C.glQueryCounter(endTimeQuery, GL33C.GL_TIMESTAMP);
+
         endQueryInserted = true;
     }
 
-    public void endQueryCheck() {
+    public boolean endQueryCheck() {
         if (!endQueryInserted) {
             LOGGER.error("endQueryInsert() must be called before endQueryCheck()",
                     new IllegalStateException("endQueryInsert() must be called before endQueryCheck()"));
@@ -77,6 +95,7 @@ public class GpuTimeCollector {
             GL32C.glDeleteQueries(endTimeQuery);
             endTimeQuery = null;
 
+            startQueryCheck();
             if (startTimeGpu == null) {
                 LOGGER.error("startTimeGpu is null", new IllegalStateException("startTimeGpu is null"));
                 throw new IllegalStateException("startTimeGpu is null");
@@ -86,6 +105,9 @@ public class GpuTimeCollector {
             if (endCallback != null) {
                 endCallback.run();
             }
+
+            return true;
         }
+        return false;
     }
 }

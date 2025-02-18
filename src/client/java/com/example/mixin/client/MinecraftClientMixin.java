@@ -28,19 +28,21 @@ public abstract class MinecraftClientMixin {
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     // runTick里面可能包着runTick，导致意外运行顺序，需要注意
-    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;setErrorSection(Ljava/lang/String;)V", ordinal = 0))
-    private void beforeRunTick(boolean bl, CallbackInfo ci) {
+    @Inject(method = "runTick", at = @At(value = "HEAD", shift = At.Shift.AFTER))
+    private void afterRunTick(boolean bl, CallbackInfo ci) {
         ReflexMod.getScheduler().Wait();
 
         cpuTimeCollect.startCollect();
-
         ReflexMod.getScheduler().renderQueueAdd();
+    }
+
+    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V"))
+    private void beforeFlush(CallbackInfo ci) {
+        ReflexMod.getScheduler().renderQueueEndInsert();
     }
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V", shift = At.Shift.AFTER))
     private void afterFlush(CallbackInfo ci) {
-        ReflexMod.getScheduler().renderQueueEndInsert();
-
         cpuTimeCollect.endCollect();
         Long cpuTime = cpuTimeCollect.getCpuTime();
         cpuTimeCollect.reset();
@@ -48,7 +50,5 @@ public abstract class MinecraftClientMixin {
             // 更新 CPU 预测时间
             ReflexMod.getScheduler().updateCpuTime(cpuTime);
         }
-
-        ReflexMod.getScheduler().renderQueueStartWait();
     }
 }
