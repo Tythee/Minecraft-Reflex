@@ -36,12 +36,13 @@ public abstract class MinecraftClientMixin {
         ReflexMod.getScheduler().renderQueueAdd();
     }
 
-    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V"))
+
+    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"))
     private void beforeFlush(CallbackInfo ci) {
         ReflexMod.getScheduler().renderQueueEndInsert();
     }
 
-    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V", shift = At.Shift.AFTER))
+    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V", shift = At.Shift.AFTER))
     private void afterFlush(CallbackInfo ci) {
         cpuTimeCollect.endCollect();
         Long cpuTime = cpuTimeCollect.getCpuTime();
