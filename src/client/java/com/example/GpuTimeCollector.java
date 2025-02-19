@@ -21,6 +21,7 @@ public class GpuTimeCollector {
     private Runnable startCallback = null;
     private Runnable endCallback = null;
 
+    //gpu和System时间流速不一致
     long gpuToSystem(long gpu) {
         long[] t = new long[1];
         GL33C.glGetInteger64v(GL33C.GL_TIMESTAMP, t);
@@ -101,7 +102,7 @@ public class GpuTimeCollector {
                 throw new IllegalStateException("startTimeGpu is null");
             }
 
-            endTimeSystem = startTimeSystem + endTimeGpu - startTimeGpu;
+            endTimeSystem = gpuToSystem(endTimeGpu);
             if (endCallback != null) {
                 endCallback.run();
             }

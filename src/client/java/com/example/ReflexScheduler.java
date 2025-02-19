@@ -162,7 +162,7 @@ public class ReflexScheduler {
         GpuTimeCollector gpuTimeCollector = new GpuTimeCollector();
         gpuTimeCollector.setCallback(
                 null, () -> {
-                    updateGpuTime(gpuTimeCollector.endTimeGpu - gpuTimeCollector.startTimeGpu);
+                    updateGpuTime(gpuTimeCollector.endTimeSystem - gpuTimeCollector.startTimeSystem);
                 });
 
         gpuTimeCollector.startQueryInsert();
