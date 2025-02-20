@@ -43,8 +43,20 @@ public abstract class MinecraftClientMixin {
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V", shift = At.Shift.AFTER))
     private void afterFlush(CallbackInfo ci) {
-        cpuTimeCollect.endCollect();
-        Long cpuTime = cpuTimeCollect.getCpuTime();
+        Long cpuTime = null;
+
+        if (!ReflexMod.getScheduler().gpuTimeCollectorDeque.isEmpty()) {
+            ReflexMod.getScheduler().gpuTimeCollectorDeque.getFirst().startQueryCheck();
+        }
+        if(!ReflexMod.getScheduler().gpuTimeCollectorDeque.isEmpty() && ReflexMod.getScheduler().gpuTimeCollectorDeque.getFirst().startTimeSystem != null){
+            if (cpuTimeCollect.startTime != null) {
+                cpuTime = ReflexMod.getScheduler().gpuTimeCollectorDeque.getFirst().startTimeSystem - cpuTimeCollect.startTime;
+            }
+        }else{
+            cpuTimeCollect.endCollect();
+            cpuTime = cpuTimeCollect.getCpuTime();
+        }
+
         cpuTimeCollect.reset();
         if (cpuTime != null) {
             // 更新 CPU 预测时间
