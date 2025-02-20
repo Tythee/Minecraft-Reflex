@@ -64,6 +64,7 @@ public class GpuTimeCollector {
                 if (startCallback != null) {
                     startCallback.run();
                 }
+//                System.out.println("gpu StaTime:\t" + startTimeGpu);
             }
         }
     }
