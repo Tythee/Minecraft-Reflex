@@ -22,28 +22,15 @@ public abstract class MinecraftClientMixin {
         ReflexClient.getScheduler().renderQueueAdd();
     }
 
-
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"))
     private void beforeFlush(CallbackInfo ci) {
         ReflexClient.getScheduler().renderQueueEndInsert();
+        cpuTimeCollect.endCollect();
     }
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V", shift = At.Shift.AFTER))
     private void afterFlush(CallbackInfo ci) {
-        Long cpuTime = null;
-
-        if (!ReflexClient.getScheduler().gpuTimeCollectorDeque.isEmpty()) {
-            ReflexClient.getScheduler().gpuTimeCollectorDeque.getFirst().startQueryCheck();
-        }
-        if(!ReflexClient.getScheduler().gpuTimeCollectorDeque.isEmpty() && ReflexClient.getScheduler().gpuTimeCollectorDeque.getFirst().startTimeSystem != null){
-            if (cpuTimeCollect.startTime != null) {
-                cpuTime = ReflexClient.getScheduler().gpuTimeCollectorDeque.getFirst().startTimeSystem - cpuTimeCollect.startTime;
-            }
-        }else{
-            cpuTimeCollect.endCollect();
-            cpuTime = cpuTimeCollect.getCpuTime();
-        }
-
+        Long cpuTime = cpuTimeCollect.getCpuTime();
         cpuTimeCollect.reset();
         if (cpuTime != null) {
             ReflexClient.getScheduler().updateCpuTime(cpuTime);
