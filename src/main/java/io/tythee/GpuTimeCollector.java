@@ -1,4 +1,4 @@
-package com.example;
+package io.tythee;
 
 import org.lwjgl.opengl.GL32C;
 import org.lwjgl.opengl.GL33C;
@@ -6,7 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.mojang.blaze3d.platform.GlConst.GL_TRUE;
-import static com.example.Reflex.MOD_ID;
+import static io.tythee.ReflexClient.MOD_ID;
 
 public class GpuTimeCollector {
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -21,7 +21,6 @@ public class GpuTimeCollector {
     private Runnable startCallback = null;
     private Runnable endCallback = null;
 
-    //gpu和System时间流速不一致
     long gpuToSystem(long gpu) {
         long[] t = new long[1];
         GL33C.glGetInteger64v(GL33C.GL_TIMESTAMP, t);
@@ -64,7 +63,6 @@ public class GpuTimeCollector {
                 if (startCallback != null) {
                     startCallback.run();
                 }
-//                System.out.println("gpu StaTime:\t" + startTimeGpu);
             }
         }
     }

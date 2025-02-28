@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"id": "reflex",
 	"version": "${version}",
-	"name": "reflex",
-	"description": "降低延迟",
+	"name": "Reflex AntiLag",
+	"description": "This mod implements Nvidia Reflex in Minecraft to reduce rendering latency.",
 	"authors": [
 		"Tythee"
 	],
@@ -13,24 +13,17 @@
 	},
 	"license": "All rights reserved",
 	"icon": "assets/reflex/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"com.example.Reflex"
-		],
 		"client": [
-			"com.example.ReflexClient"
+			"io.tythee.ReflexClient"
 		],
 		"modmenu": [
-			"com.example.config.ModMenuIntegration"
+			"io.tythee.config.ModMenuIntegration"
 		]
 	},
 	"mixins": [
-		"reflex.mixins.json",
-		{
-			"config": "reflex.client.mixins.json",
-			"environment": "client"
-		}
+		"reflex.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.16.10",
@@ -39,6 +32,6 @@
 		"fabric-api": "*"
 	},
 	"suggests": {
-		"another-mod": "*"
+		"modmenu": "*"
 	}
 }

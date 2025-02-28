@@ -1,9 +1,9 @@
-package com.example;
+package io.tythee;
 
 import net.fabricmc.api.ClientModInitializer;
 
-// ReflexMod.java - 主类
-public class ReflexMod implements ClientModInitializer {
+public class ReflexClient implements ClientModInitializer {
+	public static final String MOD_ID = "reflex";
     private static final ReflexScheduler SCHEDULER = new ReflexScheduler();
 
     @Override
