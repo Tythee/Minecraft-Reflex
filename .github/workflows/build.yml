@@ -1,14 +1,11 @@
 name: Build and Upload Artifacts
-
 on:
   push:
     branches: ['*']
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -16,13 +13,24 @@ jobs:
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew
 
+      - name: Extract Minecraft Version
+        id: minecraft-version
+        run: |
+          MC_VER=$(grep "minecraft_version" gradle.properties | cut -d'=' -f2)
+          echo "Extracted Minecraft version: $MC_VER"
+          echo "mc_version=$MC_VER" >> $GITHUB_OUTPUT
+
       - name: Determine Java Version
         id: java-version
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          if [[ "$BRANCH_NAME" == "main" ]]; then
+          MAJOR=$(echo "${{ steps.minecraft-version.outputs.mc_version }}" | cut -d'.' -f1)
+          MINOR=$(echo "${{ steps.minecraft-version.outputs.mc_version }}" | cut -d'.' -f2)
+
+          if [[ $MAJOR -eq 1 ]] && [[ $MINOR -lt 21 ]]; then
+            echo "Java 17 selected for Minecraft <1.21.x"
             echo "java_version=17" >> $GITHUB_OUTPUT
           else
+            echo "Java 21 selected for Minecraft >=1.21.x"
             echo "java_version=21" >> $GITHUB_OUTPUT
           fi
 
