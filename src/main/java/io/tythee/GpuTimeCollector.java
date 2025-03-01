@@ -2,15 +2,11 @@ package io.tythee;
 
 import org.lwjgl.opengl.GL32C;
 import org.lwjgl.opengl.GL33C;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.mojang.blaze3d.platform.GlConst.GL_TRUE;
-import static io.tythee.ReflexClient.MOD_ID;
+import static io.tythee.ReflexClient.LOGGER;
 
 public class GpuTimeCollector {
-    private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
     public Long startTimeSystem = null;
     public Long endTimeSystem = null;
     public Long startTimeGpu = null;
