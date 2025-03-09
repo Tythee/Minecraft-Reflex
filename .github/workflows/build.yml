@@ -14,7 +14,7 @@ jobs:
       - name: Extract Minecraft Version
         id: minecraft-version
         run: |
-          MC_VER=$(grep "minecraft_version" gradle.properties | cut -d'=' -f2)
+          MC_VER=$(grep "minecraft_version" gradle.properties | cut -d'=' -f2 | xargs)
           echo "Extracted Minecraft version: $MC_VER"
           echo "mc_version=$MC_VER" >> $GITHUB_OUTPUT
       - name: Determine Java Version
