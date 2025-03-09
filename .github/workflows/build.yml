@@ -9,23 +9,19 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew
-
       - name: Extract Minecraft Version
         id: minecraft-version
         run: |
           MC_VER=$(grep "minecraft_version" gradle.properties | cut -d'=' -f2)
           echo "Extracted Minecraft version: $MC_VER"
           echo "mc_version=$MC_VER" >> $GITHUB_OUTPUT
-
       - name: Determine Java Version
         id: java-version
         run: |
           MAJOR=$(echo "${{ steps.minecraft-version.outputs.mc_version }}" | cut -d'.' -f1)
           MINOR=$(echo "${{ steps.minecraft-version.outputs.mc_version }}" | cut -d'.' -f2)
-
           if [[ $MAJOR -eq 1 ]] && [[ $MINOR -lt 21 ]]; then
             echo "Java 17 selected for Minecraft <1.21.x"
             echo "java_version=17" >> $GITHUB_OUTPUT
@@ -33,13 +29,11 @@ jobs:
             echo "Java 21 selected for Minecraft >=1.21.x"
             echo "java_version=21" >> $GITHUB_OUTPUT
           fi
-
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
           java-version: ${{ steps.java-version.outputs.java_version }}
           distribution: 'temurin'
-
       - name: Cache Gradle
         uses: actions/cache@v3
         with:
@@ -47,17 +41,19 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
-
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: wrapper
-
       - name: Build with Gradle
         run: ./gradlew build
-
-      - name: Upload Artifacts
+      - name: Upload Fabric Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
-          path: build/libs/*.jar
+          name: fabric-${{ steps.minecraft-version.outputs.mc_version }}-artifact
+          path: fabric/build/libs/*.jar
+      - name: Upload NeoForge Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoforge-${{ steps.minecraft-version.outputs.mc_version }}-artifact
+          path: neoforge/build/libs/*.jar

@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "io.tythee.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "client": [
+    "MinecraftClientMixin"
+  ],
+  "mixins": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

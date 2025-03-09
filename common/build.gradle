@@ -1,0 +1,13 @@
+architectury {
+    common rootProject.enabled_platforms.split(',')
+}
+
+dependencies {
+    // Fabric API.
+    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+    
+    // Cloth Config API.
+    modApi("me.shedaniel.cloth:cloth-config-fabric:${rootProject.cloth_config_version}") {
+		exclude(group: "net.fabricmc.fabric-api")
+	}
+}

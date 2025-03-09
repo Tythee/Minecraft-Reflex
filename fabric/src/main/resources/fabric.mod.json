@@ -16,10 +16,10 @@
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"io.tythee.ReflexClient"
+			"io.tythee.fabric.ReflexClientFabric"
 		],
 		"modmenu": [
-			"io.tythee.config.ModMenuIntegration"
+			"io.tythee.fabric.config.ModMenuIntegration"
 		]
 	},
 	"mixins": [
@@ -32,6 +32,7 @@
 		"fabric-api": "*"
 	},
 	"suggests": {
-		"modmenu": "*"
+		"modmenu": "*",
+		"cloth-config-fabric": "*"
 	}
 }
