@@ -22,12 +22,12 @@ public abstract class MinecraftClientMixin {
         ReflexClient.getScheduler().renderQueueAdd();
     }
 
-    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;swapBuffers(Lnet/minecraft/client/util/tracy/TracyFrameCapturer;)V"))
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;swapBuffers()V"))
     private void beforeFlush(CallbackInfo ci) {
         ReflexClient.getScheduler().renderQueueEndInsert();
     }
 
-    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;swapBuffers(Lnet/minecraft/client/util/tracy/TracyFrameCapturer;)V", shift = At.Shift.AFTER))
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;swapBuffers()V", shift = At.Shift.AFTER))
     private void afterFlush(CallbackInfo ci) {
         Long cpuTime = null;
         if (!ReflexClient.getScheduler().gpuTimeCollectorDeque.isEmpty()) {
