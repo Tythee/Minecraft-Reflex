@@ -7,6 +7,9 @@
 	"authors": [
 		"Tythee"
 	],
+	"contributors": [
+		"OrzMiku"
+	],
 	"contact": {
 		"homepage": "https://www.curseforge.com/minecraft/mc-mods/reflex-antilag",
 		"sources": "https://github.com/Tythee/Minecraft-Reflex"
@@ -32,7 +35,6 @@
 		"fabric-api": "*"
 	},
 	"suggests": {
-		"modmenu": "*",
-		"cloth-config-fabric": "*"
+		"modmenu": "*"
 	}
 }

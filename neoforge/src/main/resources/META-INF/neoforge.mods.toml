@@ -35,10 +35,10 @@ ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies.reflex]]
-modId = "cloth-config-neoforge"
-type = "optional"
-versionRange = "[0,)"
-ordering = "NONE"
+modId = "cloth_config"
+type = "required"
+versionRange = "[17.0.144,)"
+ordering = "BEFORE"
 side = "BOTH"
 
 [[mixins]]
