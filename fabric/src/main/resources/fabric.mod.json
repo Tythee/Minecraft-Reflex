@@ -32,9 +32,8 @@
 		"fabricloader": ">=0.16.10",
 		"minecraft": "~1.21.4",
 		"java": ">=21",
-		"fabric-api": "*"
-	},
-	"suggests": {
-		"modmenu": "*"
+		"fabric-api": "*",
+		"modmenu": "*",
+		"cloth-config": "*"
 	}
 }

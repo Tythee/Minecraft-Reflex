@@ -37,7 +37,7 @@ side = "BOTH"
 [[dependencies.reflex]]
 modId = "cloth_config"
 type = "required"
-versionRange = "[17.0.144,)"
+versionRange = "[0,)"
 ordering = "BEFORE"
 side = "BOTH"
 
