@@ -52,8 +52,8 @@ jobs:
         with:
           name: fabric-${{ steps.minecraft-version.outputs.mc_version }}-artifact
           path: fabric/build/libs/*.jar
-      - name: Upload NeoForge Artifact
+      - name: Upload Forge Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: neoforge-${{ steps.minecraft-version.outputs.mc_version }}-artifact
-          path: neoforge/build/libs/*.jar
+          name: forge-${{ steps.minecraft-version.outputs.mc_version }}-artifact
+          path: forge/build/libs/*.jar

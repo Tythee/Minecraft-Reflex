@@ -1,5 +1,5 @@
 modLoader = "javafml"
-loaderVersion = "[4,)"
+loaderVersion = "[47,)"
 issueTrackerURL = "https://github.com/Tythee/Minecraft-Reflex/issues"
 license = "All rights reserved"
 
@@ -14,25 +14,22 @@ This mod implements Nvidia Reflex in Minecraft to reduce rendering latency.
 logoFile = "assets/reflex/icon.png"
 
 [[dependencies.reflex]]
-modId = "neoforge"
-type = "required"
-versionRange = "[21.4,)"
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.reflex]]
 modId = "minecraft"
-type = "required"
-versionRange = "[1.21.4,)"
+mandatory = true
+versionRange = "[1.20.1,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.reflex]]
 modId = "cloth_config"
-type = "required"
+mandatory = true
 versionRange = "[0,)"
 ordering = "BEFORE"
 side = "BOTH"
-
-[[mixins]]
-config = "reflex.mixins.json"
