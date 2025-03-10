@@ -12,15 +12,26 @@ public class ReflexScheduler {
     private Long estimateCpuTime = null;
 
     private final int gpuWindowSize = 60;
-    private final Deque<Long> gpuTimesHistory = new ArrayDeque<>();
-    private final float[] gpuWeights;
+    private final long[] gpuTimeRingBuffer = new long[gpuWindowSize];
+    private int ringBufferIndex = 0;
+    private int validSamples = 0;
 
     public Deque<GpuTimeCollector> gpuTimeCollectorDeque = new ArrayDeque<>();
 
+    private final float weightBase = 1.2f;
+    private final float[] gpuWeights;
+
     public ReflexScheduler() {
         this.gpuWeights = new float[gpuWindowSize];
+        float weightSum = 0;
+
         for (int i = 0; i < gpuWindowSize; i++) {
-            gpuWeights[i] = (float) Math.pow(1.5, gpuWindowSize - i - 1);
+            gpuWeights[i] = (float) Math.pow(weightBase, i);
+            weightSum += gpuWeights[i];
+        }
+
+        for (int i = 0; i < gpuWindowSize; i++) {
+            gpuWeights[i] /= weightSum;
         }
     }
 
@@ -33,26 +44,20 @@ public class ReflexScheduler {
     }
 
     public void updateGpuTime(long gpuTimeNs) {
-        if (gpuTimesHistory.size() >= gpuWindowSize) {
-            gpuTimesHistory.removeLast();
-        }
-        gpuTimesHistory.addFirst(gpuTimeNs);
+        gpuTimeRingBuffer[ringBufferIndex] = gpuTimeNs;
+        ringBufferIndex = (ringBufferIndex + 1) % gpuWindowSize;
+        validSamples = Math.min(validSamples + 1, gpuWindowSize);
     }
 
     public Long getEstimateGpuTime() {
-        if (gpuTimesHistory.isEmpty()) {
-            return null;
+        if (validSamples == 0) return null;
+    
+        float weightedSum = 0;
+        for (int i = 0; i < validSamples; i++) {
+            int idx = (ringBufferIndex - 1 - i + gpuWindowSize) % gpuWindowSize;
+            weightedSum += gpuTimeRingBuffer[idx] * gpuWeights[i];
         }
-        float totalWeight = 0;
-        long totalGpu = 0;
-        int i = 0;
-        for (Long gpu : gpuTimesHistory) {
-            totalGpu += (long) (gpu * gpuWeights[i]);
-            totalWeight += gpuWeights[i];
-            i++;
-        }
-        long avgGpu = (long) (totalGpu / totalWeight);
-        return avgGpu;
+        return (long) weightedSum;
     }
 
     private Long calculateWaitTime() {
