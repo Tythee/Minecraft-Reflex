@@ -28,13 +28,6 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.reflex]]
-modId = "architectury"
-type = "required"
-versionRange = "[15.0.1,)"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.reflex]]
 modId = "cloth_config"
 type = "required"
 versionRange = "[0,)"
