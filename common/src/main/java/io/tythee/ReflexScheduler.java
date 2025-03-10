@@ -9,18 +9,35 @@ import java.util.Iterator;
 
 public class ReflexScheduler {
     private final float alpha = 0.85f;
-    private Long estimateCpuTime = null;
+    public Long estimateCpuTime = null;
 
     private final int gpuWindowSize = 60;
-    private final Deque<Long> gpuTimesHistory = new ArrayDeque<>();
-    private final float[] gpuWeights;
+    private final long[] gpuTimeRingBuffer = new long[gpuWindowSize];
+    private int ringBufferIndex = 0;
+    private int validSamples = 0;
 
     public Deque<GpuTimeCollector> gpuTimeCollectorDeque = new ArrayDeque<>();
+    
+    ObjectPool.ObjectFactory<GpuTimeCollector> collectorFactory = () -> new GpuTimeCollector();
+    ObjectPool.ObjectResetter<GpuTimeCollector> collectorResetter = collector -> {
+        collector.reset();
+    };
+    private final ObjectPool<GpuTimeCollector> collectorPool = new ObjectPool<>(collectorFactory, collectorResetter);
+
+    private final float weightBase = 1.5f;
+    private final float[] gpuWeights;
 
     public ReflexScheduler() {
         this.gpuWeights = new float[gpuWindowSize];
+        float weightSum = 0;
+
         for (int i = 0; i < gpuWindowSize; i++) {
-            gpuWeights[i] = (float) Math.pow(1.5, gpuWindowSize - i - 1);
+            gpuWeights[i] = (float) Math.pow(weightBase, gpuWindowSize - 1 - i);
+            weightSum += gpuWeights[i];
+        }
+
+        for (int i = 0; i < gpuWindowSize; i++) {
+            gpuWeights[i] /= weightSum;
         }
     }
 
@@ -33,26 +50,20 @@ public class ReflexScheduler {
     }
 
     public void updateGpuTime(long gpuTimeNs) {
-        if (gpuTimesHistory.size() >= gpuWindowSize) {
-            gpuTimesHistory.removeLast();
-        }
-        gpuTimesHistory.addFirst(gpuTimeNs);
+        gpuTimeRingBuffer[ringBufferIndex] = gpuTimeNs;
+        ringBufferIndex = (ringBufferIndex + 1) % gpuWindowSize;
+        validSamples = Math.min(validSamples + 1, gpuWindowSize);
     }
 
     public Long getEstimateGpuTime() {
-        if (gpuTimesHistory.isEmpty()) {
-            return null;
+        if (validSamples == 0) return null;
+    
+        float weightedSum = 0;
+        for (int i = 0; i < validSamples; i++) {
+            int idx = (ringBufferIndex - 1 - i + gpuWindowSize) % gpuWindowSize;
+            weightedSum += gpuTimeRingBuffer[idx] * gpuWeights[i];
         }
-        float totalWeight = 0;
-        long totalGpu = 0;
-        int i = 0;
-        for (Long gpu : gpuTimesHistory) {
-            totalGpu += (long) (gpu * gpuWeights[i]);
-            totalWeight += gpuWeights[i];
-            i++;
-        }
-        long avgGpu = (long) (totalGpu / totalWeight);
-        return avgGpu;
+        return (long) weightedSum;
     }
 
     private Long calculateWaitTime() {
@@ -95,11 +106,13 @@ public class ReflexScheduler {
         }
     }
 
+    private static final double NS_TO_SECONDS = 1e-9;
+
     public void Wait() {
         while (true) {
             Long waitTime = calculateWaitTime();
             if (waitTime != null && ModConfig.INSTANCE.isReflexEnabled()) {
-                GLFW.glfwWaitEventsTimeout(waitTime / 1e9);
+                GLFW.glfwWaitEventsTimeout(waitTime * NS_TO_SECONDS);
             } else {
                 break;
             }
@@ -112,20 +125,19 @@ public class ReflexScheduler {
     public void renderQueueAdd() {
         if (lastRenderQueueAction != RenderQueueAction.END_INSERT && lastRenderQueueAction != null) {
             gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
+            collectorPool.returnObject(currentOperateGpuTimeCollector);
             currentOperateGpuTimeCollector = null;
             lastRenderQueueAction = null;
         }
-
-        GpuTimeCollector gpuTimeCollector = new GpuTimeCollector();
+    
+        GpuTimeCollector gpuTimeCollector = collectorPool.borrow();
         gpuTimeCollector.setCallback(
                 null, () -> {
                     updateGpuTime(gpuTimeCollector.endTimeSystem - gpuTimeCollector.startTimeSystem);
+                    collectorPool.returnObject(gpuTimeCollector);
                 });
-
         gpuTimeCollector.startQueryInsert();
-
         gpuTimeCollectorDeque.addFirst(gpuTimeCollector);
-
         currentOperateGpuTimeCollector = gpuTimeCollector;
         lastRenderQueueAction = RenderQueueAction.ADD;
     }
@@ -133,13 +145,12 @@ public class ReflexScheduler {
     public void renderQueueEndInsert() {
         if (lastRenderQueueAction != RenderQueueAction.ADD) {
             gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
+            collectorPool.returnObject(currentOperateGpuTimeCollector);
             currentOperateGpuTimeCollector = null;
             lastRenderQueueAction = null;
             return;
         }
-
         currentOperateGpuTimeCollector.endQueryInsert();
-
         lastRenderQueueAction = RenderQueueAction.END_INSERT;
     }
 }
