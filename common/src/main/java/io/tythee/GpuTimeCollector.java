@@ -106,4 +106,15 @@ public class GpuTimeCollector {
         }
         return false;
     }
+
+    public void reset() {
+        startTimeSystem = null;
+        endTimeSystem = null;
+        startTimeGpu = null;
+        endTimeGpu = null;
+        startTimeQuery = null;
+        endTimeQuery = null;
+        startQueryInserted = false;
+        endQueryInserted = false;
+    }
 }
