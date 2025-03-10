@@ -107,13 +107,11 @@ public class ReflexScheduler {
     }
 
     private static final double NS_TO_SECONDS = 1e-9;
-    private static final long MIN_WAIT_NS = 1000;
 
     public void Wait() {
         while (true) {
             Long waitTime = calculateWaitTime();
             if (waitTime != null && ModConfig.INSTANCE.isReflexEnabled()) {
-                if (waitTime < MIN_WAIT_NS) break;
                 GLFW.glfwWaitEventsTimeout(waitTime * NS_TO_SECONDS);
             } else {
                 break;
