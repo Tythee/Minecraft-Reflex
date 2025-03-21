@@ -1,6 +1,6 @@
 # Minecraft-Reflex
 
-此mod在Minecraft中实现Nvidia Reflex，降低渲染延迟。
+此mod在Minecraft中实现Nvidia Reflex，降低渲染延迟。（允许任意gpu使用）
 
 选项中有两个选项，一个是切换开关，一个是减少等待时间。
 减少等待时间以纳秒为单位，如果启用reflex后gpu占有率下降，可增加一些数值使gpu占用率上升，使得gpu占用率刚刚好达到100%，如果增加数值过头会增加延迟。
@@ -10,7 +10,7 @@
 
 # Minecraft-Reflex
 
-This mod implements Nvidia Reflex in Minecraft to reduce rendering latency.
+This mod implements Nvidia Reflex in Minecraft to reduce rendering latency.（Allow any GPU to use）
 
 There are two options in the settings: one is a toggle switch, and the other is to reduce waiting time.
 The waiting time is reduced in nanoseconds. If enabling Reflex causes a drop in GPU utilization, you can increase the value slightly to raise the GPU usage to around 100%. However, increasing the value too much will lead to higher latency.
