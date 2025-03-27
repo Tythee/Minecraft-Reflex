@@ -3,7 +3,7 @@ package io.tythee;
 import org.lwjgl.opengl.GL32C;
 import org.lwjgl.opengl.GL33C;
 
-import static com.mojang.blaze3d.platform.GlConst.GL_TRUE;
+import static com.mojang.blaze3d.opengl.GlConst.GL_TRUE;
 import static io.tythee.ReflexClient.LOGGER;
 
 public class GpuTimeCollector {
