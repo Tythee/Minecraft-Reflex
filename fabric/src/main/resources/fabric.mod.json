@@ -33,7 +33,9 @@
 		"minecraft": "~1.21.5",
 		"java": ">=21",
 		"fabric-api": "*",
-		"modmenu": "*",
 		"cloth-config": "*"
+	},
+	"recommends": {
+		"modmenu": "*"
 	}
 }
