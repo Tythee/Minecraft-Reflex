@@ -32,6 +32,9 @@ bin/
 
 run/
 
+# architectury transformer
+.architectury-transformer/
+
 # java
 
 hs_err_*.log
