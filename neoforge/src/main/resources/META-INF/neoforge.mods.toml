@@ -16,21 +16,21 @@ logoFile = "assets/reflex/icon.png"
 [[dependencies.reflex]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.5,)"
+versionRange = "[26.1,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.reflex]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.5,)"
+versionRange = "[26.1,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.reflex]]
 modId = "cloth_config"
 type = "required"
-versionRange = "[18.0.145,)"
+versionRange = "[26.1.154,)"
 ordering = "BEFORE"
 side = "BOTH"
 

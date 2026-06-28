@@ -1,20 +1,21 @@
 package io.tythee.mixin;
 
+import com.mojang.authlib.minecraft.client.MinecraftClient;
 import io.tythee.CpuTimeCollector;
 import io.tythee.ReflexClient;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(MinecraftClient.class)
+@Mixin(Minecraft.class)
 public abstract class MinecraftClientMixin {
     @Unique
     private final CpuTimeCollector cpuTimeCollect = new CpuTimeCollector();
 
-    @Inject(method = "render", at = @At(value = "HEAD", shift = At.Shift.AFTER))
+    @Inject(method = "renderFrame", at = @At(value = "HEAD", shift = At.Shift.AFTER))
     private void afterRender(boolean bl, CallbackInfo ci) {
         ReflexClient.getScheduler().Wait();
 
@@ -22,12 +23,25 @@ public abstract class MinecraftClientMixin {
         ReflexClient.getScheduler().renderQueueAdd();
     }
 
-    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;swapBuffers(Lnet/minecraft/client/util/tracy/TracyFrameCapturer;)V"))
+    @Inject(
+            method = "renderFrame",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
+            )
+    )
     private void beforeFlush(CallbackInfo ci) {
         ReflexClient.getScheduler().renderQueueEndInsert();
     }
 
-    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Window;swapBuffers(Lnet/minecraft/client/util/tracy/TracyFrameCapturer;)V", shift = At.Shift.AFTER))
+    @Inject(
+            method = "renderFrame",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V",
+                    shift = At.Shift.AFTER
+            )
+    )
     private void afterFlush(CallbackInfo ci) {
         Long cpuTime = null;
         if (!ReflexClient.getScheduler().gpuTimeCollectorDeque.isEmpty()) {
