@@ -1,6 +1,5 @@
 package io.tythee.mixin;
 
-import com.mojang.authlib.minecraft.client.MinecraftClient;
 import io.tythee.CpuTimeCollector;
 import io.tythee.ReflexClient;
 import net.minecraft.client.Minecraft;
@@ -27,7 +26,7 @@ public abstract class MinecraftClientMixin {
             method = "renderFrame",
             at = @At(
                     value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
+                    target = "Lcom/mojang/blaze3d/systems/GpuSurface;present()V"
             )
     )
     private void beforeFlush(CallbackInfo ci) {
@@ -38,7 +37,7 @@ public abstract class MinecraftClientMixin {
             method = "renderFrame",
             at = @At(
                     value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V",
+                    target = "Lcom/mojang/blaze3d/systems/GpuSurface;present()V",
                     shift = At.Shift.AFTER
             )
     )
