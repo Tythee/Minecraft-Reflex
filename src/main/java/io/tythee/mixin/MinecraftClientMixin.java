@@ -17,8 +17,8 @@ public abstract class MinecraftClientMixin {
     // Mojang renamed this method from runTick(Z)V (pre-26.1) to renderFrame(Z)V (26.1+)
     private static final String RENDER_FRAME = /*$ render_frame_method*/ "renderFrame(Z)V";
 
-    // Frame presentation moved from Window#updateDisplay(TracyFrameCapture) (pre-26.1)
-    // to RenderSystem#flipFrame(TracyFrameCapture) (26.1+); same call site in the render loop.
+    // The frame-present call site keeps getting renamed by Mojang release to release:
+    // Window#updateDisplay (<26), RenderSystem#flipFrame (26.1.x), GpuSurface#present (26.2+).
     private static final String FLIP_FRAME_TARGET = /*$ flip_frame_target*/ "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V";
 
     @Inject(method = RENDER_FRAME, at = @At(value = "HEAD", shift = At.Shift.AFTER))

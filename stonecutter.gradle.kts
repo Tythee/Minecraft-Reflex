@@ -24,12 +24,17 @@ stonecutter parameters {
     // Mojang renamed Minecraft#renderFrame(Z)V from runTick(Z)V before 26.1
     swaps["render_frame_method"] = "\"${if (current.parsed < "26") "runTick(Z)V" else "renderFrame(Z)V"}\";"
 
-    // Before 26.1, the frame is presented via Window#updateDisplay(TracyFrameCapture);
-    // 26.1+ replaced that with RenderSystem#flipFrame(TracyFrameCapture) (same call site
-    // in the render loop, verified by disassembling both versions' Minecraft class).
+    // The frame-present call site keeps getting renamed by Mojang release to release
+    // (verified by disassembling Minecraft#runTick/renderFrame on each target version):
+    //   <26     Window#updateDisplay(TracyFrameCapture)
+    //   26.1.x  RenderSystem#flipFrame(TracyFrameCapture)
+    //   26.2+   GpuSurface#present()  (no longer takes the capture object)
     swaps["flip_frame_target"] = "\"${
-        if (current.parsed < "26") "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
-        else "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
+        when {
+            current.parsed < "26" -> "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
+            current.parsed < "26.2" -> "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
+            else -> "Lcom/mojang/blaze3d/systems/GpuSurface;present()V"
+        }
     }\";"
 }
 
