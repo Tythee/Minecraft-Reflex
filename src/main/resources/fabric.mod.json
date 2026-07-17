@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "${id}",
+	"version": "${version}",
+	"name": "${name}",
+	"description": "This mod implements Nvidia Reflex in Minecraft to reduce rendering latency.",
+	"authors": [
+		"Tythee"
+	],
+	"contributors": [
+		"OrzMiku"
+	],
+	"contact": {
+		"homepage": "https://www.curseforge.com/minecraft/mc-mods/reflex-antilag",
+		"sources": "https://github.com/Tythee/Minecraft-Reflex"
+	},
+	"license": "All rights reserved",
+	"icon": "assets/reflex/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"io.tythee.fabric.ReflexClientFabric"
+		],
+		"modmenu": [
+			"io.tythee.fabric.config.ModMenuIntegration"
+		]
+	},
+	"mixins": [
+		"reflex.mixins.json"
+	],
+	"depends": {
+		"fabricloader": "*",
+		"minecraft": "${minecraft}",
+		"java": ">=21",
+		"fabric-api": "*",
+		"cloth-config": "*"
+	},
+	"recommends": {
+		"modmenu": "*"
+	}
+}
