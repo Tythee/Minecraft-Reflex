@@ -133,7 +133,10 @@ public class ReflexScheduler {
         GpuTimeCollector gpuTimeCollector = collectorPool.borrow();
         gpuTimeCollector.setCallback(
                 null, () -> {
-                    updateGpuTime(gpuTimeCollector.endTimeSystem - gpuTimeCollector.startTimeSystem);
+                    Long gpuTime = gpuTimeCollector.getGpuTime();
+                    if (gpuTime != null) {
+                        updateGpuTime(gpuTime);
+                    }
                     collectorPool.returnObject(gpuTimeCollector);
                 });
         gpuTimeCollector.startQueryInsert();

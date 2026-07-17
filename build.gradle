@@ -37,6 +37,13 @@ subprojects {
     }
 
     java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
         withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 25
     }
 }

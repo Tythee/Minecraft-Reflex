@@ -1,29 +1,28 @@
 package io.tythee;
 
-import org.lwjgl.opengl.GL32C;
-import org.lwjgl.opengl.GL33C;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.systems.GpuQueryPool;
+import com.mojang.blaze3d.systems.RenderSystem;
 
-import static com.mojang.blaze3d.opengl.GlConst.GL_TRUE;
+import java.util.OptionalLong;
+
 import static io.tythee.ReflexClient.LOGGER;
 
 public class GpuTimeCollector {
+    private static final int START_QUERY = 0;
+    private static final int END_QUERY = 1;
+
     public Long startTimeSystem = null;
-    public Long endTimeSystem = null;
-    public Long startTimeGpu = null;
-    public Long endTimeGpu = null;
-    public Integer startTimeQuery = null;
-    public Integer endTimeQuery = null;
+    private Long startTimeGpu = null;
+    private Long endTimeGpu = null;
+    private Long gpuTimeNs = null;
+
+    private GpuQueryPool queryPool = null;
+    private CommandEncoder queryEncoder = null;
 
     private Runnable startCallback = null;
     private Runnable endCallback = null;
-
-    long gpuToSystem(long gpu) {
-        long[] t = new long[1];
-        GL33C.glGetInteger64v(GL33C.GL_TIMESTAMP, t);
-        long system = System.nanoTime();
-        long gpuToSystemOffset = system - t[0];
-        return gpu + gpuToSystemOffset;
-    }
 
     GpuTimeCollector() {
     }
@@ -34,12 +33,23 @@ public class GpuTimeCollector {
     }
 
     public void startQueryInsert() {
-        startTimeQuery = GL32C.glGenQueries();
-        GL33C.glQueryCounter(startTimeQuery, GL33C.GL_TIMESTAMP);
-        startQueryInserted = true;
-        if (startTimeQuery == null) {
-            throw new RuntimeException("Could not find query insertion time");
+        if (queryPool != null) {
+            throw new IllegalStateException("GPU query has already been created");
         }
+
+        GpuDevice device = RenderSystem.getDevice();
+        queryPool = device.createTimestampQueryPool(2);
+        queryEncoder = device.createCommandEncoder();
+        queryEncoder.writeTimestamp(queryPool, START_QUERY);
+
+        // OpenGL executes the timestamp write immediately, so it can also be used
+        // as an approximation of the corresponding CPU time. Vulkan records the
+        // timestamp into a command buffer and does not have that property.
+        if ("OpenGL".equalsIgnoreCase(device.getDeviceInfo().backendName())) {
+            startTimeSystem = System.nanoTime();
+        }
+
+        startQueryInserted = true;
     }
 
     public void startQueryCheck() {
@@ -50,12 +60,10 @@ public class GpuTimeCollector {
         }
 
         if (startTimeGpu == null) {
-            if (GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT_AVAILABLE) == GL_TRUE) {
-                startTimeGpu = GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT);
-                GL32C.glDeleteQueries(startTimeQuery);
-                startTimeQuery = null;
+            OptionalLong result = queryPool.getValue(START_QUERY);
+            if (result.isPresent()) {
+                startTimeGpu = result.getAsLong();
 
-                startTimeSystem = gpuToSystem(startTimeGpu);
                 if (startCallback != null) {
                     startCallback.run();
                 }
@@ -73,8 +81,7 @@ public class GpuTimeCollector {
             throw new IllegalStateException("startQueryInsert() must be called before endQueryInsert()");
         }
 
-        endTimeQuery = GL32C.glGenQueries();
-        GL33C.glQueryCounter(endTimeQuery, GL33C.GL_TIMESTAMP);
+        queryEncoder.writeTimestamp(queryPool, END_QUERY);
 
         endQueryInserted = true;
     }
@@ -86,18 +93,19 @@ public class GpuTimeCollector {
             throw new IllegalStateException("endQueryInsert() must be called before endQueryCheck()");
         }
 
-        if (GL33C.glGetQueryObjecti64(endTimeQuery, GL33C.GL_QUERY_RESULT_AVAILABLE) == GL_TRUE) {
-            endTimeGpu = GL33C.glGetQueryObjecti64(endTimeQuery, GL33C.GL_QUERY_RESULT);
-            GL32C.glDeleteQueries(endTimeQuery);
-            endTimeQuery = null;
+        OptionalLong[] results = queryPool.getValues(0, 2);
+        if (results[0].isPresent() && results[1].isPresent()) {
+            startTimeGpu = results[0].getAsLong();
+            endTimeGpu = results[1].getAsLong();
 
-            startQueryCheck();
-            if (startTimeGpu == null) {
-                LOGGER.error("startTimeGpu is null", new IllegalStateException("startTimeGpu is null"));
-                throw new IllegalStateException("startTimeGpu is null");
-            }
+            float timestampPeriod = RenderSystem.getDevice().getDeviceInfo().timestampPeriod();
+            gpuTimeNs = Math.max(0L, (long) ((endTimeGpu - startTimeGpu) * timestampPeriod));
 
-            endTimeSystem = gpuToSystem(endTimeGpu);
+            GpuQueryPool completedQueryPool = queryPool;
+            queryPool = null;
+            queryEncoder = null;
+            completedQueryPool.close();
+
             if (endCallback != null) {
                 endCallback.run();
             }
@@ -107,13 +115,20 @@ public class GpuTimeCollector {
         return false;
     }
 
+    public Long getGpuTime() {
+        return gpuTimeNs;
+    }
+
     public void reset() {
+        if (queryPool != null) {
+            queryPool.close();
+            queryPool = null;
+        }
+        queryEncoder = null;
         startTimeSystem = null;
-        endTimeSystem = null;
         startTimeGpu = null;
         endTimeGpu = null;
-        startTimeQuery = null;
-        endTimeQuery = null;
+        gpuTimeNs = null;
         startQueryInserted = false;
         endQueryInserted = false;
     }

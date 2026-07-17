@@ -22,7 +22,10 @@ jobs:
         run: |
           MAJOR=$(echo "${{ steps.minecraft-version.outputs.mc_version }}" | cut -d'.' -f1)
           MINOR=$(echo "${{ steps.minecraft-version.outputs.mc_version }}" | cut -d'.' -f2)
-          if [[ $MAJOR -eq 1 ]] && [[ $MINOR -lt 21 ]]; then
+          if [[ $MAJOR -ge 26 ]]; then
+            echo "Java 25 selected for Minecraft >=26.x"
+            echo "java_version=25" >> $GITHUB_OUTPUT
+          elif [[ $MAJOR -eq 1 ]] && [[ $MINOR -lt 21 ]]; then
             echo "Java 17 selected for Minecraft <1.21.x"
             echo "java_version=17" >> $GITHUB_OUTPUT
           else
@@ -30,21 +33,19 @@ jobs:
             echo "java_version=21" >> $GITHUB_OUTPUT
           fi
       - name: Set up JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ steps.java-version.outputs.java_version }}
           distribution: 'temurin'
       - name: Cache Gradle
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
-        with:
-          gradle-version: wrapper
+        uses: gradle/actions/setup-gradle@v4
       - name: Build with Gradle
         run: ./gradlew build
       - name: Upload Fabric Artifact
