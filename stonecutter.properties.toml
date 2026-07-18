@@ -1,0 +1,68 @@
+# See https://stonecutter.kikugie.dev/wiki/config/properties#centralized-properties
+mod.id = "reflex"
+mod.name = "Reflex AntiLag"
+mod.group = "io.tythee"
+mod.version = "1.0.4"
+
+deps.fabric_loader = "0.19.3"
+loomx.loom_version = "1.17-SNAPSHOT"
+
+
+["1.21.10"]
+mod.mc_releases = ["1.21.10"]
+
+[fabric."1.21.10"]
+mod.mc_compat = "1.21.10"
+deps.fabric_api = "0.138.4+1.21.10"
+deps.cloth_config = "20.0.149"
+deps.modmenu = "16.0.1"
+
+[neoforge."1.21.10"]
+mod.mc_compat = "[1.21.10]"
+deps.neo_loader = "21.10.64"
+deps.cloth_config = "20.0.149"
+
+
+["1.21.11"]
+mod.mc_releases = ["1.21.11"]
+
+[fabric."1.21.11"]
+mod.mc_compat = "1.21.11"
+deps.fabric_api = "0.141.5+1.21.11"
+deps.cloth_config = "21.11.153"
+deps.modmenu = "17.0.1-beta.1"
+
+[neoforge."1.21.11"]
+mod.mc_compat = "[1.21.11]"
+deps.neo_loader = "21.11.44"
+deps.cloth_config = "21.11.153"
+
+
+["26.1.2"]
+mod.mc_releases = ["26.1.2"]
+
+[fabric."26.1.2"]
+mod.mc_compat = "26.1.2"
+deps.fabric_api = "0.155.2+26.1.2"
+deps.cloth_config = "26.1.154"
+deps.modmenu = "18.0.0"
+
+[neoforge."26.1.2"]
+mod.mc_compat = "[26.1.2]"
+deps.neo_loader = "26.1.2.82"
+deps.cloth_config = "26.1.154"
+
+
+["26.2"]
+mod.mc_releases = ["26.2"]
+
+[fabric."26.2"]
+mod.mc_compat = "26.2"
+deps.fabric_api = "0.155.2+26.2"
+deps.cloth_config = "26.2.155"
+deps.modmenu = "20.0.1"
+
+[neoforge."26.2"]
+mod.mc_compat = "[26.2, 26.3)"
+deps.neo_loader = "26.2.0.23-beta"
+deps.cloth_config = "26.2.155"
