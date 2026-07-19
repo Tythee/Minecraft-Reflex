@@ -18,10 +18,8 @@ public class ReflexScheduler {
 
     public Deque<GpuTimeCollector> gpuTimeCollectorDeque = new ArrayDeque<>();
 
-    ObjectPool.ObjectFactory<GpuTimeCollector> collectorFactory = () -> new GpuTimeCollector();
-    ObjectPool.ObjectResetter<GpuTimeCollector> collectorResetter = collector -> {
-        collector.reset();
-    };
+    ObjectPool.ObjectFactory<GpuTimeCollector> collectorFactory = GpuTimeCollector::new;
+    ObjectPool.ObjectResetter<GpuTimeCollector> collectorResetter = GpuTimeCollector::reset;
     private final ObjectPool<GpuTimeCollector> collectorPool = new ObjectPool<>(collectorFactory, collectorResetter);
 
     private final float weightBase = 1.5f;
@@ -75,9 +73,11 @@ public class ReflexScheduler {
                 gpuTimeCollector.startQueryCheck();
                 if(gpuTimeCollector.endQueryCheck()){
                     gpuTimeCollectorIterator.remove();
+                    collectorPool.returnObject(gpuTimeCollector);
                 }
             } else {
                 gpuTimeCollectorIterator.remove();
+                collectorPool.returnObject(gpuTimeCollector);
             }
         }
 
@@ -134,7 +134,6 @@ public class ReflexScheduler {
         gpuTimeCollector.setCallback(
                 null, () -> {
                     updateGpuTime(gpuTimeCollector.endTimeSystem - gpuTimeCollector.startTimeSystem);
-                    collectorPool.returnObject(gpuTimeCollector);
                 });
         gpuTimeCollector.startQueryInsert();
         gpuTimeCollectorDeque.addFirst(gpuTimeCollector);

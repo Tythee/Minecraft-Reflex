@@ -15,10 +15,12 @@ public abstract class MinecraftClientMixin {
     private final CpuTimeCollector cpuTimeCollect = new CpuTimeCollector();
 
     // Mojang renamed this method from runTick(Z)V (pre-26.1) to renderFrame(Z)V (26.1+)
+    @Unique
     private static final String RENDER_FRAME = /*$ render_frame_method*/ "renderFrame(Z)V";
 
     // The frame-present call site keeps getting renamed by Mojang release to release:
     // Window#updateDisplay (<26), RenderSystem#flipFrame (26.1.x), GpuSurface#present (26.2+).
+    @Unique
     private static final String FLIP_FRAME_TARGET = /*$ flip_frame_target*/ "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V";
 
     @Inject(method = RENDER_FRAME, at = @At(value = "HEAD", shift = At.Shift.AFTER))
@@ -31,10 +33,7 @@ public abstract class MinecraftClientMixin {
 
     @Inject(
             method = RENDER_FRAME,
-            at = @At(
-                    value = "INVOKE",
-                    target = FLIP_FRAME_TARGET
-            )
+            at = @At(value = "INVOKE", target = FLIP_FRAME_TARGET)
     )
     private void beforeFlush(CallbackInfo ci) {
         ReflexClient.getScheduler().renderQueueEndInsert();
@@ -44,7 +43,7 @@ public abstract class MinecraftClientMixin {
             method = RENDER_FRAME,
             at = @At(
                     value = "INVOKE",
-                    target = FLIP_FRAME_TARGET,
+                    target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V",
                     shift = At.Shift.AFTER
             )
     )
