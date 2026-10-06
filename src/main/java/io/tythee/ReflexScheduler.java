@@ -33,7 +33,7 @@ public class ReflexScheduler {
     private final float[] gpuWeights;
 
     // Adaptive closed-loop margin state
-    private long adaptiveMarginNs = 300_000L; // default 0.30ms
+    private long adaptiveMarginNs = 0L; // default 0.00ms
     private int healthyFramesCount = 0;
     private Long lastFrameGpuEndTimeSystem = null;
     private Long lastFrameCpuEndTime = null;
@@ -123,7 +123,7 @@ public class ReflexScheduler {
         if (ModConfig.INSTANCE.isAdaptiveMargin()) {
             return adaptiveMarginNs;
         }
-        return 300_000L;
+        return 0L;
     }
 
     public void checkCompletedQueries() {
@@ -271,8 +271,8 @@ public class ReflexScheduler {
         healthyFramesCount++;
         if (healthyFramesCount >= 60) {
             healthyFramesCount = 0;
-            if (adaptiveMarginNs > 100_000L) { // floor at 0.10ms
-                adaptiveMarginNs = Math.max(100_000L, adaptiveMarginNs - 10_000L); // decay by -0.010ms
+            if (adaptiveMarginNs > 0L) { // floor at 0.00ms
+                adaptiveMarginNs = Math.max(0L, adaptiveMarginNs - 10_000L); // decay by -0.010ms
                 double newMarginMs = adaptiveMarginNs / 1_000_000.0;
                 if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                     ReflexClient.LOGGER.info(String.format(
