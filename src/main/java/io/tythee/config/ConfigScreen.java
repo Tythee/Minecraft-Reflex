@@ -38,6 +38,15 @@ public class ConfigScreen {
 
         generalCategory.addEntry(
                 entryBuilder.startBooleanToggle(
+                                Component.literal("时序流程图展示 (Timeline Diagram)"),
+                                ModConfig.INSTANCE.isTimelineDiagram())
+                        .setDefaultValue(true)
+                        .setTooltip(Component.literal("在 F3 调试面板中以多行流水线时序图直观展示 CPU 与 GPU 的对齐与排队状态"))
+                        .setSaveConsumer(ModConfig.INSTANCE::setTimelineDiagram)
+                        .build());
+
+        generalCategory.addEntry(
+                entryBuilder.startBooleanToggle(
                                 Component.literal("显示实时延迟指标 (Reflex Metrics)"),
                                 ModConfig.INSTANCE.isShowLatencyMetrics())
                         .setDefaultValue(true)

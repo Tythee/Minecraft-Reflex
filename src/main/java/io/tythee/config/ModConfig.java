@@ -13,6 +13,7 @@ public class ModConfig {
     private boolean reflexEnabled = true;
     private boolean adaptiveMargin = true;
     private boolean showLatencyMetrics = true;
+    private boolean timelineDiagram = true;
     private boolean enableDiagnosticLogging = true;
     private long manualWaitOffsetNs = 0;
     private long reduceWaitTime = 0;
@@ -31,6 +32,14 @@ public class ModConfig {
 
     public void setAdaptiveMargin(boolean adaptiveMargin) {
         this.adaptiveMargin = adaptiveMargin;
+    }
+
+    public boolean isTimelineDiagram() {
+        return timelineDiagram;
+    }
+
+    public void setTimelineDiagram(boolean timelineDiagram) {
+        this.timelineDiagram = timelineDiagram;
     }
 
     public boolean isShowLatencyMetrics() {

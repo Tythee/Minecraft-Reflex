@@ -37,10 +37,13 @@
 
 ### F3 调试面板指标说明
 
-开启选项后，F3 左侧将显示如下指标条目：
+开启选项后，F3 调试面板将以直观的**多行时序流程图（Timeline Diagram）**展示 CPU 与 GPU 的对齐与排队状态：
 ```text
-[Reflex] PC: 8.5ms | Game: 3.1ms | Queue: +0.2ms | Render: 6.9ms | Overlap: 1.5ms | Wait: 2.3ms | Margin: 0.30ms (Adaptive)
+[Reflex Pipeline] PC: 21.4ms (Adaptive | Margin: 0.00ms)
+├─ CPU: [Wait 13.0ms] ──► [Input] ──► [Game 3.5ms]
+└─ GPU:                 [Zero Queue] ──► [Render 17.6ms] (Overlap: 1.5ms)
 ```
+*(若在配置中关闭“时序流程图展示”，则紧凑显示单行文本模式)*
 
 | 指标 | 物理含义 |
 | :--- | :--- |
@@ -59,10 +62,11 @@
 游戏内通过 Mod Menu / Cloth Config 打开配置界面：
 
 1. **启用 Reflex**（默认开启）：功能总开关。
-2. **自适应动态闭环 (Adaptive Margin)**（默认开启）：全自动动态调节安全裕量，平衡无空转与最低延迟。
-3. **显示实时延迟指标 (Reflex Metrics)**（默认开启）：在 F3 调试面板注入实时延迟信息。
-4. **启用诊断日志 (Diagnostic Logging)**（默认开启）：每秒聚合向控制台输出一次统计摘要。
-5. **手动等待偏置 (纳秒)**（默认 0）：可选的微调参数，正数减少等待时间，负数增加等待时间。
+2. **时序流程图展示 (Timeline Diagram)**（默认开启）：在 F3 调试面板中以多行流水线流程图直观展示 CPU 与 GPU 的对齐与排队状态。
+3. **自适应动态闭环 (Adaptive Margin)**（默认开启）：全自动动态调节安全裕量，平衡无空转与最低延迟。
+4. **显示实时延迟指标 (Reflex Metrics)**（默认开启）：在 F3 调试面板注入实时延迟信息。
+5. **启用诊断日志 (Diagnostic Logging)**（默认开启）：每秒聚合向控制台输出一次统计摘要。
+6. **手动等待偏置 (纳秒)**（默认 0）：可选的微调参数，正数减少等待时间，负数增加等待时间。
 
 ---
 

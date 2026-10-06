@@ -3,6 +3,9 @@ package io.tythee;
 import io.tythee.config.ModConfig;
 import static io.tythee.ReflexClient.LOGGER;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 public class ReflexMetrics {
@@ -185,6 +188,56 @@ public class ReflexMetrics {
             framesSinceLastLog = 0;
             starveCount = 0;
         }
+    }
+
+    public synchronized List<String> getMetricsLines() {
+        if (!ModConfig.INSTANCE.isTimelineDiagram()) {
+            return Collections.singletonList(getMetricsString());
+        }
+
+        List<String> list = new ArrayList<>();
+        String status = ModConfig.INSTANCE.isReflexEnabled()
+                ? (ModConfig.INSTANCE.isAdaptiveMargin() ? "§aAdaptive" : "§eFixed")
+                : "§cDisabled";
+
+        String pcColor = smoothPcMs < 20.0 ? "§a" : (smoothPcMs < 30.0 ? "§e" : "§c");
+        String marginStr = ModConfig.INSTANCE.isReflexEnabled()
+                ? String.format(Locale.ROOT, " §7| Margin: §f%.2fms", smoothMarginMs)
+                : "";
+
+        list.add(String.format(Locale.ROOT,
+                "§6[Reflex Pipeline] %sPC: %.1fms §7(%s%s§7)",
+                pcColor, smoothPcMs, status, marginStr));
+
+        if (smoothWaitMs > 0.05) {
+            list.add(String.format(Locale.ROOT,
+                    "§7├─ §bCPU: §e[Wait %.1fms] §7──► §a[Input] §7──► §b[Game %.1fms]",
+                    smoothWaitMs, smoothGameMs));
+            if (smoothQueueMs >= 0.1) {
+                list.add(String.format(Locale.ROOT,
+                        "§7└─ §dGPU:                 §c[Queue +%.1fms] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
+                        smoothQueueMs, smoothRenderMs, smoothOverlapMs));
+            } else {
+                list.add(String.format(Locale.ROOT,
+                        "§7└─ §dGPU:                 §a[Zero Queue] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
+                        smoothRenderMs, smoothOverlapMs));
+            }
+        } else {
+            list.add(String.format(Locale.ROOT,
+                    "§7├─ §bCPU: §a[Input] §7──► §b[Game %.1fms]",
+                    smoothGameMs));
+            if (smoothQueueMs >= 0.1) {
+                list.add(String.format(Locale.ROOT,
+                        "§7└─ §dGPU:         §c[Queue +%.1fms] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
+                        smoothQueueMs, smoothRenderMs, smoothOverlapMs));
+            } else {
+                list.add(String.format(Locale.ROOT,
+                        "§7└─ §dGPU:         §a[Zero Queue] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
+                        smoothRenderMs, smoothOverlapMs));
+            }
+        }
+
+        return list;
     }
 
     public synchronized String getMetricsString() {

@@ -16,14 +16,14 @@ public abstract class DebugOverlayMixin {
     @Inject(method = "extractLines", at = @At("HEAD"))
     private void onExtractLines(net.minecraft.client.gui.GuiGraphicsExtractor extractor, List<String> lines, boolean isLeft, CallbackInfo ci) {
         if (isLeft && ModConfig.INSTANCE.isShowLatencyMetrics()) {
-            lines.add(ReflexMetrics.getInstance().getMetricsString());
+            lines.addAll(ReflexMetrics.getInstance().getMetricsLines());
         }
     }
     //?} else {
     /*@Inject(method = "renderLines", at = @At("HEAD"))
     private void onRenderLines(net.minecraft.client.gui.GuiGraphics graphics, List<String> lines, boolean isLeft, CallbackInfo ci) {
         if (isLeft && ModConfig.INSTANCE.isShowLatencyMetrics()) {
-            lines.add(ReflexMetrics.getInstance().getMetricsString());
+            lines.addAll(ReflexMetrics.getInstance().getMetricsLines());
         }
     }*///?}
 }
