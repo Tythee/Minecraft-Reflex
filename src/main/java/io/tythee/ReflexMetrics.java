@@ -244,31 +244,30 @@ public class ReflexMetrics {
         int queueChars = (int) Math.round(queueMs * cPerMs);
         int renderChars = Math.max(2, (int) Math.round(renderMs * cPerMs));
 
-        // Line 1: Simulation (starts at left: T=0, ends at T=simMs)
+        // Line 1: Simulation (starts at T=0)
         list.add(String.format(Locale.ROOT,
                 "§7├─ §bSim  │ §b%s §7%.1fms",
                 repeatChar('█', simChars), simMs));
 
-        // Line 2: Render Submission (left edge starts at T=simMs, shows Flush and Rest without brackets)
-        String subIndent = repeatChar(' ', simChars);
+        // Line 2: Render Submission (track uses ░ with identical glyph width as █)
+        String subLeadTrack = repeatChar('░', simChars);
         list.add(String.format(Locale.ROOT,
-                "§7├─ §9Sub  │ %s§3%s§9%s §7(§3Flush: %.1fms §9Rest: %.1fms§7)",
-                subIndent, repeatChar('█', flushChars), repeatChar('█', restChars), flushMs, restSubMs));
+                "§7├─ §9Sub  │ §8%s§3%s§9%s §7(§3Flush: %.1fms §9Rest: %.1fms§7)",
+                subLeadTrack, repeatChar('█', flushChars), repeatChar('█', restChars), flushMs, restSubMs));
 
-        // Line 3: GPU (starts exactly after Sim + Flush, then Queue, then Render)
-        int gpuLeadChars = simChars + flushChars;
-        String gpuIndent = repeatChar(' ', gpuLeadChars);
-        String qBar = queueChars > 0 ? String.format("§c%s", repeatChar('░', queueChars)) : "";
+        // Line 3: GPU (lead track matches Sim + Flush width to the exact pixel)
+        String gpuLeadTrack = repeatChar('░', simChars + flushChars);
+        String qBar = queueChars > 0 ? String.format("§c%s", repeatChar('▒', queueChars)) : "";
         String rBar = String.format("§d%s", repeatChar('█', renderChars));
 
         if (queueMs >= 0.1) {
             list.add(String.format(Locale.ROOT,
-                    "§7└─ §dGPU  │ %s%s%s §7(§cQueue: +%.1fms §dRender: %.1fms§7)",
-                    gpuIndent, qBar, rBar, queueMs, renderMs));
+                    "§7└─ §dGPU  │ §8%s%s%s §7(§cQueue: +%.1fms §dRender: %.1fms§7)",
+                    gpuLeadTrack, qBar, rBar, queueMs, renderMs));
         } else {
             list.add(String.format(Locale.ROOT,
-                    "§7└─ §dGPU  │ %s%s §7(§aZero Q §dRender: %.1fms §aOverlap: %.1fms§7)",
-                    gpuIndent, rBar, renderMs, smoothOverlapMs));
+                    "§7└─ §dGPU  │ §8%s%s §7(§aZero Q §dRender: %.1fms §aOverlap: %.1fms§7)",
+                    gpuLeadTrack, rBar, renderMs, smoothOverlapMs));
         }
 
         return list;

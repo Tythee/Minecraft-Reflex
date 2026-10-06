@@ -39,10 +39,10 @@
 
 开启选项后，F3 调试面板将以直观的**多行时序流程图（Timeline Diagram）**展示 CPU 与 GPU 的对齐与排队状态：
 ```text
-[Reflex Pipeline] PC: 17.1ms (Wait: 11.9ms | Margin: 0.04ms | Adaptive)
-├─ Sim  │ █ 0.4ms
-├─ Sub  │  ███ (Flush: 1.8ms Rest: 0.6ms)
-└─ GPU  │    ███████████████ (Zero Q Render: 14.8ms Overlap: 0.6ms)
+[Reflex Pipeline] PC: 17.0ms (Wait: 11.3ms | Margin: 0.13ms | Adaptive)
+├─ Sim  │ █ 0.3ms
+├─ Sub  │ ░███ (Flush: 1.9ms Rest: 0.6ms)
+└─ GPU  │ ░░░███████████████ (Zero Q Render: 14.6ms Overlap: 0.6ms)
 ```
 *(若在配置中关闭“时序流程图展示”，则紧凑显示单行文本模式)*
 
