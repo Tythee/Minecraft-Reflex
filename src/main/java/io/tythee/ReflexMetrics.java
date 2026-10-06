@@ -16,6 +16,9 @@ public class ReflexMetrics {
     }
 
     private long gameLatencyNs = 0;
+    private long simLatencyNs = 0;
+    private long subLatencyNs = 0;
+    private long flushLatencyNs = 0;
     private long queueLatencyNs = 0;
     private long renderLatencyNs = 0;
     private long overlapNs = 0;
@@ -24,6 +27,9 @@ public class ReflexMetrics {
     private long pcLatencyNs = 0;
 
     private double smoothGameMs = 0;
+    private double smoothSimMs = 0;
+    private double smoothSubMs = 0;
+    private double smoothFlushMs = 0;
     private double smoothQueueMs = 0;
     private double smoothRenderMs = 0;
     private double smoothOverlapMs = 0;
@@ -51,6 +57,9 @@ public class ReflexMetrics {
     public synchronized void recordFrame(
             GpuTimeCollector col,
             long gameNs,
+            long simNs,
+            long subNs,
+            long flushNs,
             long renderNs,
             long overlapNs,
             long waitNs,
@@ -78,6 +87,9 @@ public class ReflexMetrics {
         }
 
         this.gameLatencyNs = gameNs;
+        this.simLatencyNs = simNs;
+        this.subLatencyNs = subNs;
+        this.flushLatencyNs = flushNs;
         this.queueLatencyNs = queueNs;
         this.renderLatencyNs = renderNs;
         this.overlapNs = overlapNs;
@@ -86,6 +98,9 @@ public class ReflexMetrics {
         this.pcLatencyNs = truePcNs;
 
         double gameMs = gameNs / 1_000_000.0;
+        double simMsVal = simNs / 1_000_000.0;
+        double subMsVal = subNs / 1_000_000.0;
+        double flushMsVal = flushNs / 1_000_000.0;
         double queueMsVal = queueNs / 1_000_000.0;
         double renderMs = renderNs / 1_000_000.0;
         double overlapMsVal = overlapNs / 1_000_000.0;
@@ -95,6 +110,9 @@ public class ReflexMetrics {
 
         if (frameCount == 0) {
             smoothGameMs = gameMs;
+            smoothSimMs = simMsVal;
+            smoothSubMs = subMsVal;
+            smoothFlushMs = flushMsVal;
             smoothQueueMs = queueMsVal;
             smoothRenderMs = renderMs;
             smoothOverlapMs = overlapMsVal;
@@ -103,6 +121,9 @@ public class ReflexMetrics {
             smoothPcMs = pcMs;
         } else {
             smoothGameMs = ALPHA * gameMs + (1 - ALPHA) * smoothGameMs;
+            smoothSimMs = ALPHA * simMsVal + (1 - ALPHA) * smoothSimMs;
+            smoothSubMs = ALPHA * subMsVal + (1 - ALPHA) * smoothSubMs;
+            smoothFlushMs = ALPHA * flushMsVal + (1 - ALPHA) * smoothFlushMs;
             smoothQueueMs = ALPHA * queueMsVal + (1 - ALPHA) * smoothQueueMs;
             smoothRenderMs = ALPHA * renderMs + (1 - ALPHA) * smoothRenderMs;
             smoothOverlapMs = ALPHA * overlapMsVal + (1 - ALPHA) * smoothOverlapMs;
@@ -206,38 +227,58 @@ public class ReflexMetrics {
                 : "";
 
         list.add(String.format(Locale.ROOT,
-                "§6[Reflex Pipeline] %sPC: %.1fms §7(%s%s§7)",
-                pcColor, smoothPcMs, status, marginStr));
+                "§6[Reflex Pipeline] %sPC: %.1fms §7(Wait: §e%.1fms%s §7| %s§7)",
+                pcColor, smoothPcMs, smoothWaitMs, marginStr, status));
 
-        if (smoothWaitMs > 0.05) {
+        double simMs = Math.max(0.1, smoothSimMs);
+        double subMs = Math.max(0.1, smoothSubMs);
+        double flushMs = Math.min(subMs, Math.max(0.1, smoothFlushMs));
+        double restSubMs = Math.max(0.0, subMs - flushMs);
+        double queueMs = Math.max(0.0, smoothQueueMs);
+        double renderMs = Math.max(0.5, smoothRenderMs);
+
+        double cPerMs = smoothPcMs <= 15.0 ? 2.0 : 1.0;
+        int simChars = Math.max(1, (int) Math.round(simMs * cPerMs));
+        int flushChars = Math.max(1, (int) Math.round(flushMs * cPerMs));
+        int restChars = Math.max(1, (int) Math.round(restSubMs * cPerMs));
+        int queueChars = (int) Math.round(queueMs * cPerMs);
+        int renderChars = Math.max(2, (int) Math.round(renderMs * cPerMs));
+
+        // Line 1: Simulation (starts at left: T=0, ends at T=simMs)
+        list.add(String.format(Locale.ROOT,
+                "§7├─ §bSim  │ §b[%s] §7%.1fms",
+                repeatChar('█', simChars), simMs));
+
+        // Line 2: Render Submission (left edge starts at T=simMs, shows Flush and Rest)
+        String subIndent = repeatChar(' ', simChars + 2);
+        list.add(String.format(Locale.ROOT,
+                "§7├─ §9Sub  │ %s§3[%s]§9[%s] §7(§3Flush: %.1fms §9Rest: %.1fms§7)",
+                subIndent, repeatChar('█', flushChars), repeatChar('█', restChars), flushMs, restSubMs));
+
+        // Line 3: GPU (starts after Sim + Flush + Queue)
+        int gpuLeadChars = simChars + flushChars + 2;
+        String gpuIndent = repeatChar(' ', gpuLeadChars);
+        String qBar = queueChars > 0 ? String.format("§c[%s]", repeatChar('░', queueChars)) : "";
+        String rBar = String.format("§d[%s]", repeatChar('█', renderChars));
+
+        if (queueMs >= 0.1) {
             list.add(String.format(Locale.ROOT,
-                    "§7├─ §bCPU: §e[Wait %.1fms] §7──► §a[Input] §7──► §b[Game %.1fms]",
-                    smoothWaitMs, smoothGameMs));
-            if (smoothQueueMs >= 0.1) {
-                list.add(String.format(Locale.ROOT,
-                        "§7└─ §dGPU:                 §c[Queue +%.1fms] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
-                        smoothQueueMs, smoothRenderMs, smoothOverlapMs));
-            } else {
-                list.add(String.format(Locale.ROOT,
-                        "§7└─ §dGPU:                 §a[Zero Queue] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
-                        smoothRenderMs, smoothOverlapMs));
-            }
+                    "§7└─ §dGPU  │ %s%s%s §7(§cQueue: +%.1fms §dRender: %.1fms§7)",
+                    gpuIndent, qBar, rBar, queueMs, renderMs));
         } else {
             list.add(String.format(Locale.ROOT,
-                    "§7├─ §bCPU: §a[Input] §7──► §b[Game %.1fms]",
-                    smoothGameMs));
-            if (smoothQueueMs >= 0.1) {
-                list.add(String.format(Locale.ROOT,
-                        "§7└─ §dGPU:         §c[Queue +%.1fms] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
-                        smoothQueueMs, smoothRenderMs, smoothOverlapMs));
-            } else {
-                list.add(String.format(Locale.ROOT,
-                        "§7└─ §dGPU:         §a[Zero Queue] §7──► §d[Render %.1fms] §7(Overlap: §a%.1fms§7)",
-                        smoothRenderMs, smoothOverlapMs));
-            }
+                    "§7└─ §dGPU  │ %s%s §7(§aZero Q §dRender: %.1fms §aOverlap: %.1fms§7)",
+                    gpuIndent, rBar, renderMs, smoothOverlapMs));
         }
 
         return list;
+    }
+
+    private static String repeatChar(char ch, int count) {
+        if (count <= 0) return "";
+        char[] arr = new char[count];
+        java.util.Arrays.fill(arr, ch);
+        return new String(arr);
     }
 
     public synchronized String getMetricsString() {

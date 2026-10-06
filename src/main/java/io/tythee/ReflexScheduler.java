@@ -222,6 +222,9 @@ public class ReflexScheduler {
         ReflexMetrics.getInstance().recordFrame(
                 col,
                 pureCpuDuration,
+                simDuration,
+                subDuration,
+                flushDelay,
                 gpuDuration,
                 overlapNs,
                 col.waitDurationNs,
