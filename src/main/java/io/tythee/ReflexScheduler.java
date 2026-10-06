@@ -11,6 +11,9 @@ import java.util.concurrent.locks.LockSupport;
 public class ReflexScheduler {
     private final float alpha = 0.85f;
     private Long estimateCpuTime = null;
+    private Long estimateSimTime = null;
+    private Long estimateSubmissionTime = null;
+    private Long estimateFirstBatchFlushNs = null;
     private Long estimateOverlapTime = null;
 
     private final int gpuWindowSize = 60;
@@ -55,6 +58,40 @@ public class ReflexScheduler {
         } else {
             estimateCpuTime = (long) (alpha * cpuTimeNs + (1 - alpha) * estimateCpuTime);
         }
+    }
+
+    public void updateSimTime(long simNs) {
+        if (estimateSimTime == null) {
+            estimateSimTime = simNs;
+        } else {
+            estimateSimTime = (long) (0.2 * simNs + 0.8 * estimateSimTime);
+        }
+    }
+
+    public void updateSubmissionTime(long subNs) {
+        if (estimateSubmissionTime == null) {
+            estimateSubmissionTime = subNs;
+        } else {
+            estimateSubmissionTime = (long) (0.2 * subNs + 0.8 * estimateSubmissionTime);
+        }
+    }
+
+    public void updateFirstBatchFlush(long flushNs) {
+        if (estimateFirstBatchFlushNs == null) {
+            estimateFirstBatchFlushNs = flushNs;
+        } else {
+            estimateFirstBatchFlushNs = (long) (0.15 * flushNs + 0.85 * estimateFirstBatchFlushNs);
+        }
+    }
+
+    public long getEffectiveFirstBatchFlushNs() {
+        if (estimateFirstBatchFlushNs != null) {
+            return estimateFirstBatchFlushNs;
+        }
+        if (estimateSubmissionTime != null && estimateSubmissionTime > 0) {
+            return Math.min(Math.max(300_000L, (long) (0.25 * estimateSubmissionTime)), 1_500_000L);
+        }
+        return 800_000L; // default 0.80ms
     }
 
     public void updateGpuTime(long gpuTimeNs) {
@@ -123,12 +160,45 @@ public class ReflexScheduler {
         long gpuDuration = Math.max(0, col.endTimeSystem - col.startTimeSystem);
         updateGpuTime(gpuDuration);
 
-        long renderStart = (col.renderBuildStartTime > 0) ? col.renderBuildStartTime : col.cpuStartTime;
-        long renderEnd = (col.renderBuildEndTime > 0) ? col.renderBuildEndTime : col.cpuEndTime;
-        long overlapStart = Math.max(renderStart, col.startTimeSystem);
-        long overlapEnd = Math.min(renderEnd, col.endTimeSystem);
-        long overlapNs = (overlapEnd > overlapStart) ? (overlapEnd - overlapStart) : 0L;
-        overlapNs = Math.min(overlapNs, pureCpuDuration);
+        // Simulation duration (from pollEvents to start of GameRenderer.render)
+        long simDuration = (col.renderBuildStartTime > 0 && col.renderBuildStartTime > col.cpuStartTime)
+                ? (col.renderBuildStartTime - col.cpuStartTime)
+                : 0L;
+        updateSimTime(simDuration);
+
+        // Submission duration (GameRenderer.render draw call recording)
+        long subDuration = (col.renderBuildEndTime > 0 && col.renderBuildStartTime > 0 && col.renderBuildEndTime > col.renderBuildStartTime)
+                ? (col.renderBuildEndTime - col.renderBuildStartTime)
+                : Math.max(0, pureCpuDuration - simDuration);
+        updateSubmissionTime(subDuration);
+
+        // --- Hybrid Architecture: Approach 1 + Approach 3 for First Batch Flush ---
+        // Approach 3 (Dynamic Baseline Ratio): 25% of submission duration, clamped [0.3ms, 1.5ms]
+        long baselineFlushNs = Math.min(Math.max(300_000L, (long) (0.25 * subDuration)), 1_500_000L);
+        if (subDuration > 0 && baselineFlushNs > subDuration) {
+            baselineFlushNs = (long) (0.5 * subDuration);
+        }
+
+        // Approach 1 (Online Hardware Calibration on 0-Queue / Healthy Frame)
+        // When GPU was not blocked by previous frame (queue == 0), its start timestamp marks when commands arrived!
+        boolean isZeroQueue = col.startTimeSystem != null
+                && lastFrameGpuEndTimeSystem != null
+                && col.startTimeSystem >= (lastFrameGpuEndTimeSystem - 100_000L);
+
+        if (isZeroQueue && col.startTimeSystem != null && col.renderBuildStartTime > 0
+                && col.startTimeSystem >= col.renderBuildStartTime) {
+            long sampleFlushNs = col.startTimeSystem - col.renderBuildStartTime;
+            if (sampleFlushNs > 50_000L && sampleFlushNs <= subDuration) {
+                updateFirstBatchFlush(sampleFlushNs);
+            }
+        } else if (estimateFirstBatchFlushNs == null) {
+            // Cold-start fallback using Approach 3
+            estimateFirstBatchFlushNs = baselineFlushNs;
+        }
+
+        // Potential Overlap: submission time minus first batch flush delay
+        long flushDelay = getEffectiveFirstBatchFlushNs();
+        long overlapNs = Math.max(0, subDuration - flushDelay);
         overlapNs = Math.min(overlapNs, gpuDuration);
         updateOverlapTime(overlapNs);
 
@@ -182,15 +252,17 @@ public class ReflexScheduler {
             return;
         }
 
-        adaptiveMarginNs = Math.min(1_500_000L, adaptiveMarginNs + 100_000L); // +0.10ms, cap at 1.5ms
+        long stepUpNs = Math.max(100_000L, gapNs);
+        adaptiveMarginNs = Math.min(3_000_000L, adaptiveMarginNs + stepUpNs); // Immediately absorb idle gap, cap at 3.0ms
+        double stepUpMs = stepUpNs / 1_000_000.0;
         double newMarginMs = adaptiveMarginNs / 1_000_000.0;
         healthyFramesCount = 0;
 
         if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
             ReflexClient.LOGGER.info(String.format(
                     Locale.ROOT,
-                    "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, cpu=%.2fms). Cause: Over-delayed. Adjusting margin: +0.10ms -> %.2fms",
-                    gapMs, waitMs, cpuMs, newMarginMs));
+                    "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, cpu=%.2fms). Cause: Over-delayed. Adjusting margin: +%.2fms -> %.2fms",
+                    gapMs, waitMs, cpuMs, stepUpMs, newMarginMs));
         }
     }
 
@@ -223,8 +295,13 @@ public class ReflexScheduler {
             return null;
         }
 
-        long estOverlap = (estimateOverlapTime != null) ? estimateOverlapTime : 0L;
-        long leadTime = Math.max(0, estimateCpuTime - estOverlap);
+        // Modernized lead time calculation:
+        // leadTime = T_simulation + Delta_t_first_batch_flush
+        long simTime = (estimateSimTime != null)
+                ? estimateSimTime
+                : Math.max(0, estimateCpuTime - (estimateSubmissionTime != null ? estimateSubmissionTime : 0L));
+        long flushDelay = getEffectiveFirstBatchFlushNs();
+        long leadTime = simTime + flushDelay;
         long margin = getEffectiveSafetyMarginNs();
 
         // If CPU work alone is longer than or equal to GPU frame time, we are CPU-bound.
