@@ -252,17 +252,15 @@ public class ReflexScheduler {
             return;
         }
 
-        long stepUpNs = Math.max(100_000L, gapNs);
-        adaptiveMarginNs = Math.min(3_000_000L, adaptiveMarginNs + stepUpNs); // Immediately absorb idle gap, cap at 3.0ms
-        double stepUpMs = stepUpNs / 1_000_000.0;
+        adaptiveMarginNs = Math.min(1_500_000L, adaptiveMarginNs + 100_000L); // +0.10ms, cap at 1.5ms
         double newMarginMs = adaptiveMarginNs / 1_000_000.0;
         healthyFramesCount = 0;
 
         if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
             ReflexClient.LOGGER.info(String.format(
                     Locale.ROOT,
-                    "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, cpu=%.2fms). Cause: Over-delayed. Adjusting margin: +%.2fms -> %.2fms",
-                    gapMs, waitMs, cpuMs, stepUpMs, newMarginMs));
+                    "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, cpu=%.2fms). Cause: Over-delayed. Adjusting margin: +0.10ms -> %.2fms",
+                    gapMs, waitMs, cpuMs, newMarginMs));
         }
     }
 
