@@ -246,20 +246,20 @@ public class ReflexMetrics {
 
         // Line 1: Simulation (starts at left: T=0, ends at T=simMs)
         list.add(String.format(Locale.ROOT,
-                "§7├─ §bSim  │ §b[%s] §7%.1fms",
+                "§7├─ §bSim  │ §b%s §7%.1fms",
                 repeatChar('█', simChars), simMs));
 
-        // Line 2: Render Submission (left edge starts at T=simMs, shows Flush and Rest)
-        String subIndent = repeatChar(' ', simChars + 2);
+        // Line 2: Render Submission (left edge starts at T=simMs, shows Flush and Rest without brackets)
+        String subIndent = repeatChar(' ', simChars);
         list.add(String.format(Locale.ROOT,
-                "§7├─ §9Sub  │ %s§3[%s]§9[%s] §7(§3Flush: %.1fms §9Rest: %.1fms§7)",
+                "§7├─ §9Sub  │ %s§3%s§9%s §7(§3Flush: %.1fms §9Rest: %.1fms§7)",
                 subIndent, repeatChar('█', flushChars), repeatChar('█', restChars), flushMs, restSubMs));
 
-        // Line 3: GPU (starts after Sim + Flush + Queue)
-        int gpuLeadChars = simChars + flushChars + 2;
+        // Line 3: GPU (starts exactly after Sim + Flush, then Queue, then Render)
+        int gpuLeadChars = simChars + flushChars;
         String gpuIndent = repeatChar(' ', gpuLeadChars);
-        String qBar = queueChars > 0 ? String.format("§c[%s]", repeatChar('░', queueChars)) : "";
-        String rBar = String.format("§d[%s]", repeatChar('█', renderChars));
+        String qBar = queueChars > 0 ? String.format("§c%s", repeatChar('░', queueChars)) : "";
+        String rBar = String.format("§d%s", repeatChar('█', renderChars));
 
         if (queueMs >= 0.1) {
             list.add(String.format(Locale.ROOT,
