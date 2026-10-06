@@ -174,7 +174,7 @@ public class ReflexScheduler {
 
         // --- Hybrid Architecture: Approach 1 + Approach 3 for First Batch Flush ---
         // Approach 3 (Dynamic Baseline Ratio): 25% of submission duration, clamped [0.3ms, 1.5ms]
-        long baselineFlushNs = Math.min(Math.max(300_000L, (long) (0.25 * subDuration)), 1_500_000L);
+        long baselineFlushNs = Math.min(Math.max(400_000L, (long) (0.40 * subDuration)), 2_000_000L);
         if (subDuration > 0 && baselineFlushNs > subDuration) {
             baselineFlushNs = (long) (0.5 * subDuration);
         }
@@ -214,7 +214,8 @@ public class ReflexScheduler {
                 isStarved = true;
                 handleGpuStarvation(gap, col.waitDurationNs, pureCpuDuration);
             } else if (didWait && gap <= 1_000_000L) {
-                handleHealthyFrame();
+                long queueNs = (col.startTimeSystem != null && col.renderBuildEndTime > 0 && col.startTimeSystem > col.renderBuildEndTime) ? (col.startTimeSystem - col.renderBuildEndTime) : 0L;
+                handleHealthyFrame(queueNs);
             }
         }
         lastFrameGpuEndTimeSystem = col.endTimeSystem;
@@ -267,15 +268,31 @@ public class ReflexScheduler {
         }
     }
 
-    private void handleHealthyFrame() {
+    private void handleHealthyFrame(long queueNs) {
         if (!ModConfig.INSTANCE.isAdaptiveMargin()) {
             return;
         }
         healthyFramesCount++;
-        if (healthyFramesCount >= 60) {
+
+        // If there is persistent queue backlog (> 0.5ms), proactively decay margin into negative
+        if (queueNs > 500_000L) {
+            if (healthyFramesCount >= 10) { // faster response for queue backlog
+                healthyFramesCount = 0;
+                if (adaptiveMarginNs > -5_000_000L) { // allow negative margin down to -5.00ms
+                    adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - 50_000L); // step down by -0.050ms
+                    double newMarginMs = adaptiveMarginNs / 1_000_000.0;
+                    if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                        ReflexClient.LOGGER.info(String.format(
+                                Locale.ROOT,
+                                "[Reflex Adaptive] Queue backlog detected (Q=%.2fms). Margin adjusted: -0.050ms -> %.3fms",
+                                queueNs / 1_000_000.0, newMarginMs));
+                    }
+                }
+            }
+        } else if (healthyFramesCount >= 60) {
             healthyFramesCount = 0;
-            if (adaptiveMarginNs > 0L) { // floor at 0.00ms
-                adaptiveMarginNs = Math.max(0L, adaptiveMarginNs - 10_000L); // decay by -0.010ms
+            if (adaptiveMarginNs > -5_000_000L) { // allow negative margin down to -5.00ms
+                adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - 10_000L); // gentle decay by -0.010ms
                 double newMarginMs = adaptiveMarginNs / 1_000_000.0;
                 if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                     ReflexClient.LOGGER.info(String.format(
@@ -323,15 +340,14 @@ public class ReflexScheduler {
             targetGpuFinish = lastFrameGpuEndTimeSystem;
         } else {
             GpuTimeCollector oldest = gpuTimeCollectorDeque.peekFirst();
+            long oldestGpuStartEst = (oldest != null && oldest.cpuStartTime > 0)
+                    ? (oldest.cpuStartTime + leadTime)
+                    : now;
             long baseTime;
-            if (lastFrameGpuEndTimeSystem != null && oldest != null && oldest.cpuStartTime > 0) {
-                baseTime = Math.max(lastFrameGpuEndTimeSystem, oldest.cpuStartTime);
-            } else if (oldest != null && oldest.cpuStartTime > 0) {
-                baseTime = oldest.cpuStartTime;
-            } else if (lastFrameGpuEndTimeSystem != null) {
-                baseTime = lastFrameGpuEndTimeSystem;
+            if (lastFrameGpuEndTimeSystem != null && lastFrameGpuEndTimeSystem > now - 2 * estGpu) {
+                baseTime = Math.max(lastFrameGpuEndTimeSystem, oldestGpuStartEst);
             } else {
-                baseTime = now;
+                baseTime = oldestGpuStartEst;
             }
             targetGpuFinish = baseTime + (long) inFlight * estGpu;
         }
