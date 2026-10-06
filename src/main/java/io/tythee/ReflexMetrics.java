@@ -246,7 +246,7 @@ public class ReflexMetrics {
 
         // Line 1: Simulation (starts at T=0)
         list.add(String.format(Locale.ROOT,
-                "§7├─ §bSim  │ §b%s §7%.1fms",
+                "§7├─ §bSim   │ §b%s §7%.1fms",
                 repeatChar('█', simChars), simMs));
 
         // Line 2: Render Submission (track uses ░ with identical glyph width as █)

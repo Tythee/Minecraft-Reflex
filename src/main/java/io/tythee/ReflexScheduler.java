@@ -289,15 +289,15 @@ public class ReflexScheduler {
                     }
                 }
             }
-        } else if (healthyFramesCount >= 60) {
+        } else if (healthyFramesCount >= 30) {
             healthyFramesCount = 0;
-            if (adaptiveMarginNs > -5_000_000L) { // allow negative margin down to -5.00ms
-                adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - 10_000L); // gentle decay by -0.010ms
+            if (adaptiveMarginNs > -5_000_000L) { // proactive downward probing: explore lower latency & trigger flush calibration
+                adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - 20_000L); // probe down by -0.020ms
                 double newMarginMs = adaptiveMarginNs / 1_000_000.0;
                 if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                     ReflexClient.LOGGER.info(String.format(
                             Locale.ROOT,
-                            "[Reflex Adaptive] Pipeline healthy for 60 frames. Margin decayed: -0.010ms -> %.3fms",
+                            "[Reflex Adaptive] Zero queue healthy. Probing lower margin: -0.020ms -> %.3fms",
                             newMarginMs));
                 }
             }
