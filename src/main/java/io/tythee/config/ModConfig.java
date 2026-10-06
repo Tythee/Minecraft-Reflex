@@ -5,11 +5,17 @@ import java.io.FileWriter;
 import java.nio.file.Files;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public class ModConfig {
     public static ModConfig INSTANCE = load();
 
     private boolean reflexEnabled = true;
+    private boolean adaptiveMargin = true;
+    private boolean showLatencyMetrics = true;
+    private boolean enableDiagnosticLogging = true;
+    private long manualWaitOffsetNs = 0;
+    private long reduceWaitTime = 0;
 
     public boolean isReflexEnabled() {
         return reflexEnabled;
@@ -19,7 +25,37 @@ public class ModConfig {
         this.reflexEnabled = enabled;
     }
 
-    private long reduceWaitTime = 0;
+    public boolean isAdaptiveMargin() {
+        return adaptiveMargin;
+    }
+
+    public void setAdaptiveMargin(boolean adaptiveMargin) {
+        this.adaptiveMargin = adaptiveMargin;
+    }
+
+    public boolean isShowLatencyMetrics() {
+        return showLatencyMetrics;
+    }
+
+    public void setShowLatencyMetrics(boolean showLatencyMetrics) {
+        this.showLatencyMetrics = showLatencyMetrics;
+    }
+
+    public boolean isEnableDiagnosticLogging() {
+        return enableDiagnosticLogging;
+    }
+
+    public void setEnableDiagnosticLogging(boolean enableDiagnosticLogging) {
+        this.enableDiagnosticLogging = enableDiagnosticLogging;
+    }
+
+    public long getManualWaitOffsetNs() {
+        return manualWaitOffsetNs;
+    }
+
+    public void setManualWaitOffsetNs(long manualWaitOffsetNs) {
+        this.manualWaitOffsetNs = manualWaitOffsetNs;
+    }
 
     public long getReduceWaitTime() {
         return reduceWaitTime;
@@ -35,7 +71,10 @@ public class ModConfig {
             try {
                 Gson gson = new Gson();
                 String json = new String(Files.readAllBytes(configFile.toPath()));
-                return gson.fromJson(json, ModConfig.class);
+                ModConfig config = gson.fromJson(json, ModConfig.class);
+                if (config != null) {
+                    return config;
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -44,11 +83,17 @@ public class ModConfig {
     }
 
     public static void save() {
-        Gson gson = new Gson();
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
         String json = gson.toJson(ModConfig.INSTANCE);
         File configFile = new File("config/reflex.json");
-        try (FileWriter writer = new FileWriter(configFile)) {
-            writer.write(json);
+        try {
+            File parent = configFile.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            try (FileWriter writer = new FileWriter(configFile)) {
+                writer.write(json);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

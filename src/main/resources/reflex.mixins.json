@@ -4,7 +4,8 @@
   "compatibilityLevel": "${java}",
   "minVersion": "0.8",
   "client": [
-    "MinecraftClientMixin"
+    "MinecraftClientMixin",
+    "DebugOverlayMixin"
   ],
   "mixins": [
   ],

@@ -2,7 +2,7 @@ plugins {
     id("dev.kikugie.stonecutter")
 }
 
-stonecutter active "26.1.2-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "26.2-fabric" /* [SC] DO NOT EDIT */
 
 // See https://stonecutter.kikugie.dev/wiki/config/params
 stonecutter parameters {
@@ -16,6 +16,9 @@ stonecutter parameters {
     // Adds constants to Stonecutter comments (i.e. for `//? if fabric {...`)
     constants {
         match(loader, "fabric", "neoforge")
+        put("gte_26_2", current.parsed >= "26.2")
+        put("gte_26_1", current.parsed >= "26.1")
+        put("lt_26", current.parsed < "26")
     }
 
     swaps["mod_version"] = "\"${properties.get<String>("mod.version")}\";"
@@ -24,7 +27,12 @@ stonecutter parameters {
     // Mojang renamed Minecraft#renderFrame(Z)V from runTick(Z)V before 26.1
     swaps["render_frame_method"] = "\"${if (current.parsed < "26") "runTick(Z)V" else "renderFrame(Z)V"}\";"
 
-    // The frame-present call site keeps getting renamed by Mojang release to release
+    swaps["frame_start_target"] = "\"${
+        if (current.parsed < "26") "Lnet/minecraft/client/Minecraft;runTick(Z)V"
+        else "Lcom/mojang/blaze3d/systems/RenderSystem;pollEvents()V"
+    }\";"
+
+    // The frame-present call site keeps getting renamed by Mojang release to release:
     // (verified by disassembling Minecraft#runTick/renderFrame on each target version):
     //   <26     Window#updateDisplay(TracyFrameCapture)
     //   26.1.x  RenderSystem#flipFrame(TracyFrameCapture)

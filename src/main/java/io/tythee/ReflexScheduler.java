@@ -1,15 +1,17 @@
 package io.tythee;
 
 import io.tythee.config.ModConfig;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
+import java.util.Locale;
+import java.util.concurrent.locks.LockSupport;
 
 public class ReflexScheduler {
     private final float alpha = 0.85f;
     private Long estimateCpuTime = null;
+    private Long estimateOverlapTime = null;
 
     private final int gpuWindowSize = 60;
     private final long[] gpuTimeRingBuffer = new long[gpuWindowSize];
@@ -17,13 +19,21 @@ public class ReflexScheduler {
     private int validSamples = 0;
 
     public Deque<GpuTimeCollector> gpuTimeCollectorDeque = new ArrayDeque<>();
+    private GpuTimeCollector currentCollector = null;
 
-    ObjectPool.ObjectFactory<GpuTimeCollector> collectorFactory = GpuTimeCollector::new;
-    ObjectPool.ObjectResetter<GpuTimeCollector> collectorResetter = GpuTimeCollector::reset;
-    private final ObjectPool<GpuTimeCollector> collectorPool = new ObjectPool<>(collectorFactory, collectorResetter);
+    private final ObjectPool<GpuTimeCollector> collectorPool = new ObjectPool<>(
+            GpuTimeCollector::new,
+            GpuTimeCollector::reset
+    );
 
     private final float weightBase = 1.5f;
     private final float[] gpuWeights;
+
+    // Adaptive closed-loop margin state
+    private long adaptiveMarginNs = 300_000L; // default 0.30ms
+    private int healthyFramesCount = 0;
+    private Long lastFrameGpuEndTimeSystem = null;
+    private Long lastFrameCpuEndTime = null;
 
     public ReflexScheduler() {
         this.gpuWeights = new float[gpuWindowSize];
@@ -53,6 +63,14 @@ public class ReflexScheduler {
         validSamples = Math.min(validSamples + 1, gpuWindowSize);
     }
 
+    public void updateOverlapTime(long overlapNs) {
+        if (estimateOverlapTime == null) {
+            estimateOverlapTime = overlapNs;
+        } else {
+            estimateOverlapTime = (long) (0.2 * overlapNs + 0.8 * estimateOverlapTime);
+        }
+    }
+
     public Long getEstimateGpuTime() {
         if (validSamples == 0) return null;
 
@@ -64,97 +82,267 @@ public class ReflexScheduler {
         return (long) weightedSum;
     }
 
-    private Long calculateWaitTime() {
+    public long getEffectiveSafetyMarginNs() {
+        if (ModConfig.INSTANCE.isAdaptiveMargin()) {
+            return adaptiveMarginNs;
+        }
+        return 300_000L;
+    }
 
-        Iterator<GpuTimeCollector> gpuTimeCollectorIterator = gpuTimeCollectorDeque.iterator();
-        while (gpuTimeCollectorIterator.hasNext()) {
-            GpuTimeCollector gpuTimeCollector = gpuTimeCollectorIterator.next();
-            if (gpuTimeCollector.startQueryInserted && gpuTimeCollector.endQueryInserted) {
-                gpuTimeCollector.startQueryCheck();
-                if(gpuTimeCollector.endQueryCheck()){
-                    gpuTimeCollectorIterator.remove();
-                    collectorPool.returnObject(gpuTimeCollector);
+    public void checkCompletedQueries() {
+        Iterator<GpuTimeCollector> iterator = gpuTimeCollectorDeque.iterator();
+        while (iterator.hasNext()) {
+            GpuTimeCollector col = iterator.next();
+            if (col.startQueryInserted && col.endQueryInserted) {
+                if (col.checkQuery()) {
+                    processCompletedFrame(col);
+                    iterator.remove();
+                    collectorPool.returnObject(col);
+                } else {
+                    break;
                 }
             } else {
-                gpuTimeCollectorIterator.remove();
-                collectorPool.returnObject(gpuTimeCollector);
+                iterator.remove();
+                collectorPool.returnObject(col);
             }
         }
 
-        if (gpuTimeCollectorDeque.isEmpty()) {
-            return null;
-        } else {
-            if (getEstimateGpuTime() == null || estimateCpuTime == null) {
-                return null;
-            }
-
-            long waitTime;
-            if (gpuTimeCollectorDeque.getLast().startTimeSystem == null) {
-                waitTime = getEstimateGpuTime() * gpuTimeCollectorDeque.size() - estimateCpuTime;
-            } else {
-                waitTime = gpuTimeCollectorDeque.getLast().startTimeSystem
-                        + getEstimateGpuTime() * gpuTimeCollectorDeque.size()
-                        - estimateCpuTime - System.nanoTime();
-            }
-
-            waitTime -= ModConfig.INSTANCE.getReduceWaitTime();
-            if (waitTime > 0) {
-                return waitTime;
-            } else {
-                return null;
+        // Defensive cleanup: prevent unbounded queue growth if queries are dropped
+        while (gpuTimeCollectorDeque.size() > 10) {
+            GpuTimeCollector old = gpuTimeCollectorDeque.pollFirst();
+            if (old != null) {
+                collectorPool.returnObject(old);
             }
         }
     }
 
-    private static final double NS_TO_SECONDS = 1e-9;
+    private void processCompletedFrame(GpuTimeCollector col) {
+        long pureCpuDuration = (col.renderBuildEndTime > 0)
+                ? Math.max(0, col.renderBuildEndTime - col.cpuStartTime)
+                : Math.max(0, col.cpuEndTime - col.cpuStartTime);
+        long gpuDuration = Math.max(0, col.endTimeSystem - col.startTimeSystem);
+        updateGpuTime(gpuDuration);
 
-    public void Wait() {
-        while (true) {
-            Long waitTime = calculateWaitTime();
-            if (waitTime != null && ModConfig.INSTANCE.isReflexEnabled()) {
-                GLFW.glfwWaitEventsTimeout(waitTime * NS_TO_SECONDS);
-            } else {
-                break;
+        long renderStart = (col.renderBuildStartTime > 0) ? col.renderBuildStartTime : col.cpuStartTime;
+        long renderEnd = (col.renderBuildEndTime > 0) ? col.renderBuildEndTime : col.cpuEndTime;
+        long overlapStart = Math.max(renderStart, col.startTimeSystem);
+        long overlapEnd = Math.min(renderEnd, col.endTimeSystem);
+        long overlapNs = (overlapEnd > overlapStart) ? (overlapEnd - overlapStart) : 0L;
+        overlapNs = Math.min(overlapNs, pureCpuDuration);
+        overlapNs = Math.min(overlapNs, gpuDuration);
+        updateOverlapTime(overlapNs);
+
+        boolean isStarved = false;
+        Long estGpu = getEstimateGpuTime();
+        boolean isGpuBound = estGpu != null && estimateCpuTime != null && estGpu > estimateCpuTime;
+        boolean didWait = col.waitDurationNs > 200_000L;
+
+        if (lastFrameGpuEndTimeSystem != null && isGpuBound) {
+            long gap = col.startTimeSystem - lastFrameGpuEndTimeSystem;
+            // Starvation requires meaningful GPU idle gap (>1.0ms) on a frame where Reflex delayed
+            if (didWait && gap > 1_000_000L) {
+                isStarved = true;
+                handleGpuStarvation(gap, col.waitDurationNs, pureCpuDuration);
+            } else if (didWait && gap <= 1_000_000L) {
+                handleHealthyFrame();
             }
         }
+        lastFrameGpuEndTimeSystem = col.endTimeSystem;
+
+        ReflexMetrics.getInstance().recordFrame(
+                col,
+                pureCpuDuration,
+                gpuDuration,
+                overlapNs,
+                col.waitDurationNs,
+                getEffectiveSafetyMarginNs(),
+                isStarved
+        );
     }
 
-    private GpuTimeCollector currentOperateGpuTimeCollector = null;
-    private RenderQueueAction lastRenderQueueAction = null;
-
-    public void renderQueueAdd() {
-        if (lastRenderQueueAction != RenderQueueAction.END_INSERT && lastRenderQueueAction != null) {
-            gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
-            collectorPool.returnObject(currentOperateGpuTimeCollector);
-            currentOperateGpuTimeCollector = null;
-            lastRenderQueueAction = null;
-        }
-
-        GpuTimeCollector gpuTimeCollector = collectorPool.borrow();
-        gpuTimeCollector.setCallback(
-                null, () -> {
-                    updateGpuTime(gpuTimeCollector.endTimeSystem - gpuTimeCollector.startTimeSystem);
-                });
-        gpuTimeCollector.startQueryInsert();
-        gpuTimeCollectorDeque.addFirst(gpuTimeCollector);
-        currentOperateGpuTimeCollector = gpuTimeCollector;
-        lastRenderQueueAction = RenderQueueAction.ADD;
-    }
-
-    public void renderQueueEndInsert() {
-        if (lastRenderQueueAction != RenderQueueAction.ADD) {
-            gpuTimeCollectorDeque.remove(currentOperateGpuTimeCollector);
-            collectorPool.returnObject(currentOperateGpuTimeCollector);
-            currentOperateGpuTimeCollector = null;
-            lastRenderQueueAction = null;
+    private void handleGpuStarvation(long gapNs, long waitNs, long actualCpuNs) {
+        if (!ModConfig.INSTANCE.isAdaptiveMargin()) {
             return;
         }
-        currentOperateGpuTimeCollector.endQueryInsert();
-        lastRenderQueueAction = RenderQueueAction.END_INSERT;
-    }
-}
+        double gapMs = gapNs / 1_000_000.0;
+        double waitMs = waitNs / 1_000_000.0;
+        double cpuMs = actualCpuNs / 1_000_000.0;
+        double avgCpuMs = (estimateCpuTime != null ? estimateCpuTime : actualCpuNs) / 1_000_000.0;
+        double prevMarginMs = adaptiveMarginNs / 1_000_000.0;
 
-enum RenderQueueAction {
-    ADD,
-    END_INSERT
+        // If CPU took noticeably longer than normal, it is a CPU spike, not over-delayed
+        if (estimateCpuTime != null && (actualCpuNs - estimateCpuTime > 1_500_000L || actualCpuNs > 1.30 * estimateCpuTime)) {
+            if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                ReflexClient.LOGGER.info(String.format(
+                        Locale.ROOT,
+                        "[Reflex Adaptive] GPU starvation ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Margin preserved: %.2fms",
+                        cpuMs, avgCpuMs, prevMarginMs));
+            }
+            healthyFramesCount = 0;
+            return;
+        }
+
+        adaptiveMarginNs = Math.min(1_500_000L, adaptiveMarginNs + 100_000L); // +0.10ms, cap at 1.5ms
+        double newMarginMs = adaptiveMarginNs / 1_000_000.0;
+        healthyFramesCount = 0;
+
+        if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+            ReflexClient.LOGGER.info(String.format(
+                    Locale.ROOT,
+                    "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, cpu=%.2fms). Cause: Over-delayed. Adjusting margin: +0.10ms -> %.2fms",
+                    gapMs, waitMs, cpuMs, newMarginMs));
+        }
+    }
+
+    private void handleHealthyFrame() {
+        if (!ModConfig.INSTANCE.isAdaptiveMargin()) {
+            return;
+        }
+        healthyFramesCount++;
+        if (healthyFramesCount >= 60) {
+            healthyFramesCount = 0;
+            if (adaptiveMarginNs > 100_000L) { // floor at 0.10ms
+                adaptiveMarginNs = Math.max(100_000L, adaptiveMarginNs - 10_000L); // decay by -0.010ms
+                double newMarginMs = adaptiveMarginNs / 1_000_000.0;
+                if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                    ReflexClient.LOGGER.info(String.format(
+                            Locale.ROOT,
+                            "[Reflex Adaptive] Pipeline healthy for 60 frames. Margin decayed: -0.010ms -> %.3fms",
+                            newMarginMs));
+                }
+            }
+        }
+    }
+
+    private Long calculateWaitTime() {
+        if (!ModConfig.INSTANCE.isReflexEnabled()) {
+            return null;
+        }
+        Long estGpu = getEstimateGpuTime();
+        if (estGpu == null || estimateCpuTime == null) {
+            return null;
+        }
+
+        long estOverlap = (estimateOverlapTime != null) ? estimateOverlapTime : 0L;
+        long leadTime = Math.max(0, estimateCpuTime - estOverlap);
+        long margin = getEffectiveSafetyMarginNs();
+
+        // If CPU work alone is longer than or equal to GPU frame time, we are CPU-bound.
+        // No queue buildup can happen in front of the GPU; never sleep.
+        if (leadTime + margin >= estGpu) {
+            return null;
+        }
+
+        long now = System.nanoTime();
+        int inFlight = gpuTimeCollectorDeque.size();
+
+        long targetGpuFinish;
+        if (inFlight == 0) {
+            // No uncompleted frames in flight. If GPU has finished all work and is idle or unknown, don't sleep.
+            if (lastFrameGpuEndTimeSystem == null || lastFrameGpuEndTimeSystem <= now) {
+                return null;
+            }
+            targetGpuFinish = lastFrameGpuEndTimeSystem;
+        } else {
+            GpuTimeCollector oldest = gpuTimeCollectorDeque.peekFirst();
+            long baseTime;
+            if (lastFrameGpuEndTimeSystem != null && oldest != null && oldest.cpuStartTime > 0) {
+                baseTime = Math.max(lastFrameGpuEndTimeSystem, oldest.cpuStartTime);
+            } else if (oldest != null && oldest.cpuStartTime > 0) {
+                baseTime = oldest.cpuStartTime;
+            } else if (lastFrameGpuEndTimeSystem != null) {
+                baseTime = lastFrameGpuEndTimeSystem;
+            } else {
+                baseTime = now;
+            }
+            targetGpuFinish = baseTime + (long) inFlight * estGpu;
+        }
+
+        long targetPollTime = targetGpuFinish - leadTime - margin;
+        long waitTime = targetPollTime - now;
+
+        waitTime += ModConfig.INSTANCE.getManualWaitOffsetNs();
+        waitTime -= ModConfig.INSTANCE.getReduceWaitTime();
+
+        // Safety clamp: wait time must never exceed inFlight * estGpu + estGpu, capped at 3 frames
+        long maxWait = Math.max(estGpu, (long) Math.min(3, inFlight + 1) * estGpu);
+        if (waitTime > maxWait) {
+            waitTime = maxWait;
+        }
+
+        if (waitTime > 50_000L) { // Only sleep if > 0.05ms
+            return waitTime;
+        }
+        return null;
+    }
+
+    public long Wait() {
+        checkCompletedQueries();
+        if (!ModConfig.INSTANCE.isReflexEnabled()) {
+            return 0L;
+        }
+
+        Long waitTime = calculateWaitTime();
+        if (waitTime == null || waitTime <= 0) {
+            return 0L;
+        }
+
+        long startWait = System.nanoTime();
+        long targetTime = startWait + waitTime;
+        // Leave 1.5ms for fine-grained spin-wait to avoid Windows thread scheduling oversleep
+        long coarseSleepNs = waitTime - 1_500_000L;
+        if (coarseSleepNs > 0) {
+            LockSupport.parkNanos(coarseSleepNs);
+        }
+        while (System.nanoTime() < targetTime) {
+            Thread.onSpinWait();
+        }
+        return System.nanoTime() - startWait;
+    }
+
+    public void startFrame(long cpuStartTime, long waitNs) {
+        GpuTimeCollector collector = collectorPool.borrow();
+        collector.cpuStartTime = cpuStartTime;
+        collector.waitDurationNs = waitNs;
+        gpuTimeCollectorDeque.addLast(collector);
+        currentCollector = collector;
+    }
+
+    public void beforeRenderBuild() {
+        if (currentCollector != null) {
+            currentCollector.renderBuildStartTime = System.nanoTime();
+            if (!currentCollector.startQueryInserted) {
+                currentCollector.startQueryInsert();
+            }
+        }
+    }
+
+    public void afterRenderBuild() {
+        if (currentCollector != null) {
+            currentCollector.renderBuildEndTime = System.nanoTime();
+            currentCollector.endQueryInsert();
+        }
+    }
+
+    public void beforePresent() {
+        if (currentCollector != null) {
+            currentCollector.renderSubmitEndTime = System.nanoTime();
+            if (!currentCollector.endQueryInserted) {
+                currentCollector.endQueryInsert();
+            }
+        }
+    }
+
+    public void endFrame(long cpuEndTime) {
+        lastFrameCpuEndTime = cpuEndTime;
+        if (currentCollector != null) {
+            currentCollector.cpuEndTime = cpuEndTime;
+            long pureCpuTime = (currentCollector.renderBuildEndTime > 0)
+                    ? Math.max(0, currentCollector.renderBuildEndTime - currentCollector.cpuStartTime)
+                    : Math.max(0, cpuEndTime - currentCollector.cpuStartTime);
+            updateCpuTime(pureCpuTime);
+            currentCollector = null;
+        }
+        checkCompletedQueries();
+    }
 }
