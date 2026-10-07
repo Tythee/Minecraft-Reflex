@@ -338,35 +338,43 @@ public class ReflexScheduler {
         }
 
         long now = System.nanoTime();
-        int inFlight = gpuTimeCollectorDeque.size();
 
-        long targetGpuFinish;
-        if (inFlight == 0) {
-            // No uncompleted frames in flight. If GPU has finished all work and is idle or unknown, don't sleep.
-            if (lastFrameGpuEndTimeSystem == null || lastFrameGpuEndTimeSystem <= now) {
-                return null;
-            }
-            targetGpuFinish = lastFrameGpuEndTimeSystem;
-        } else {
-            GpuTimeCollector oldest = gpuTimeCollectorDeque.peekFirst();
-            long oldestGpuStartEst = (oldest != null && oldest.cpuStartTime > 0)
-                    ? (oldest.cpuStartTime + leadTime)
-                    : now;
-            long baseTime;
-            if (lastFrameGpuEndTimeSystem != null && lastFrameGpuEndTimeSystem > now - 2 * estGpu) {
-                baseTime = Math.max(lastFrameGpuEndTimeSystem, oldestGpuStartEst);
+        // Dynamically simulate GPU execution timeline:
+        // Use simulation, flushDelay, and estGpu to estimate when each queued frame will actually finish.
+        // If there really are multiple frames queued, each uncompleted frame naturally adds one estGpu!
+        // If a frame already finished in the past (as in CPU-bound or low load), it will NOT add future time.
+        long gpuTimeline = (lastFrameGpuEndTimeSystem != null && lastFrameGpuEndTimeSystem > now - 3 * estGpu)
+                ? lastFrameGpuEndTimeSystem
+                : now;
+
+        for (GpuTimeCollector col : gpuTimeCollectorDeque) {
+            long frameFlushArrival;
+            if (col.startTimeSystem != null && col.startTimeSystem > 0) {
+                frameFlushArrival = col.startTimeSystem;
+            } else if (col.renderBuildStartTime > 0) {
+                frameFlushArrival = col.renderBuildStartTime + flushDelay;
+            } else if (col.cpuStartTime > 0) {
+                frameFlushArrival = col.cpuStartTime + leadTime;
             } else {
-                baseTime = oldestGpuStartEst;
+                frameFlushArrival = now;
             }
-            targetGpuFinish = baseTime + (long) inFlight * estGpu;
+
+            long frameGpuStart = Math.max(gpuTimeline, frameFlushArrival);
+            long frameGpuDuration = (col.endTimeSystem != null && col.startTimeSystem != null && col.endTimeSystem > col.startTimeSystem)
+                    ? (col.endTimeSystem - col.startTimeSystem)
+                    : estGpu;
+
+            gpuTimeline = frameGpuStart + frameGpuDuration;
         }
+
+        long targetGpuFinish = gpuTimeline;
 
         // Positive offset increases wait time, negative offset decreases wait time
         long targetPollTime = targetGpuFinish - leadTime + offset;
         long waitTime = targetPollTime - now;
 
-        // Safety clamp: wait time must never exceed inFlight * estGpu + estGpu, capped at 3 frames
-        long maxWait = Math.max(estGpu, (long) Math.min(3, inFlight + 1) * estGpu);
+        // Hard upper bound: wait time can never exceed the total GPU work ahead, capped at 3 frames
+        long maxWait = (long) Math.min(3, Math.max(1, gpuTimeCollectorDeque.size())) * estGpu;
         if (waitTime > maxWait) {
             waitTime = maxWait;
         }
