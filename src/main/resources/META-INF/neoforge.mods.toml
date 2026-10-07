@@ -11,7 +11,7 @@ authors = "Tythee"
 description = '''
 This mod implements Nvidia Reflex in Minecraft to reduce rendering latency.
 '''
-logoFile = "assets/reflex/icon.png"
+iconFile = "assets/reflex/icon.png"
 
 [[dependencies.reflex]]
 modId = "neoforge"
