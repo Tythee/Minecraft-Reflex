@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.util.OptionalLong;
 
 public class GpuTimeCollector {
+    public long frameId = 0;
     public long cpuStartTime;
     public long renderBuildStartTime;
     public long renderBuildEndTime;
@@ -167,6 +168,7 @@ public class GpuTimeCollector {
         endQueryInserted = false;
         isReady = false;
         waitDurationNs = 0;
+        frameId = 0;
         cpuStartTime = 0;
         cpuEndTime = 0;
         renderBuildStartTime = 0;
@@ -182,6 +184,7 @@ import org.lwjgl.opengl.GL33C;
 import static com.mojang.blaze3d.opengl.GlConst.GL_TRUE;
 
 public class GpuTimeCollector {
+    public long frameId = 0;
     public long cpuStartTime;
     public long renderBuildStartTime;
     public long renderBuildEndTime;
@@ -277,6 +280,7 @@ public class GpuTimeCollector {
         endQueryInserted = false;
         isReady = false;
         waitDurationNs = 0;
+        frameId = 0;
         cpuStartTime = 0;
         cpuEndTime = 0;
         renderBuildStartTime = 0;

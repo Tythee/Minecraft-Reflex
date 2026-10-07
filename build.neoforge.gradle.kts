@@ -33,6 +33,7 @@ neoForge {
     runs {
         register("client") {
             gameDirectory = file("../../run/")
+            systemProperty("neoforge.disableGlValidation", "true")
             client()
         }
 

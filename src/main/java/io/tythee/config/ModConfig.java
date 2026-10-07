@@ -14,7 +14,7 @@ public class ModConfig {
     private boolean adaptiveMargin = true;
     private boolean showLatencyMetrics = true;
     private boolean timelineDiagram = true;
-    private boolean enableDiagnosticLogging = true;
+    private boolean enableDiagnosticLogging = isDevEnvironment();
     private long manualWaitOffsetNs = 0;
     private long reduceWaitTime = 0;
 
@@ -89,6 +89,38 @@ public class ModConfig {
             }
         }
         return new ModConfig();
+    }
+
+    public static boolean isDevEnvironment() {
+        try {
+            if (net.minecraft.SharedConstants.IS_RUNNING_IN_IDE) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> fl = Class.forName("net.fabricmc.loader.api.FabricLoader");
+            Object inst = fl.getMethod("getInstance").invoke(null);
+            if ((boolean) fl.getMethod("isDevelopmentEnvironment").invoke(inst)) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> fml = Class.forName("net.neoforged.fml.loading.FMLLoader");
+            if (!(boolean) fml.getMethod("isProduction").invoke(null)) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> fml = Class.forName("net.minecraftforge.fml.loading.FMLLoader");
+            if (!(boolean) fml.getMethod("isProduction").invoke(null)) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     public static void save() {

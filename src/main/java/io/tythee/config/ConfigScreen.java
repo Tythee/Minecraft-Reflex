@@ -58,8 +58,8 @@ public class ConfigScreen {
                 entryBuilder.startBooleanToggle(
                                 Component.literal("启用诊断日志 (Diagnostic Logging)"),
                                 ModConfig.INSTANCE.isEnableDiagnosticLogging())
-                        .setDefaultValue(true)
-                        .setTooltip(Component.literal("每秒聚合输出一次 Reflex Summary 统计日志至游戏控制台"))
+                        .setDefaultValue(ModConfig.isDevEnvironment())
+                        .setTooltip(Component.literal("每秒聚合输出一次 Reflex Summary 统计日志至游戏控制台（开发环境默认开启，生产环境默认关闭）"))
                         .setSaveConsumer(ModConfig.INSTANCE::setEnableDiagnosticLogging)
                         .build());
 

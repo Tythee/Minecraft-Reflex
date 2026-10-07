@@ -34,7 +34,8 @@ public class ReflexScheduler {
 
     // Adaptive closed-loop margin state
     private long adaptiveMarginNs = 0L; // default 0.00ms
-    private int healthyFramesCount = 0;
+    private long currentFrameId = 0L;
+    private long lastAdjustedTargetFrameId = 0L;
     private Long lastFrameGpuEndTimeSystem = null;
     private Long lastFrameCpuEndTime = null;
 
@@ -77,21 +78,28 @@ public class ReflexScheduler {
     }
 
     public void updateFirstBatchFlush(long flushNs) {
+        long cap = (estimateSubmissionTime != null && estimateSubmissionTime > 0)
+                ? Math.max(300_000L, (long) (0.50 * estimateSubmissionTime))
+                : 1_200_000L;
+        long clamped = Math.min(flushNs, cap);
         if (estimateFirstBatchFlushNs == null) {
-            estimateFirstBatchFlushNs = flushNs;
+            estimateFirstBatchFlushNs = clamped;
         } else {
-            estimateFirstBatchFlushNs = (long) (0.15 * flushNs + 0.85 * estimateFirstBatchFlushNs);
+            estimateFirstBatchFlushNs = (long) (0.15 * clamped + 0.85 * estimateFirstBatchFlushNs);
         }
     }
 
     public long getEffectiveFirstBatchFlushNs() {
+        long cap = (estimateSubmissionTime != null && estimateSubmissionTime > 0)
+                ? Math.max(300_000L, (long) (0.50 * estimateSubmissionTime))
+                : 1_200_000L;
         if (estimateFirstBatchFlushNs != null) {
-            return estimateFirstBatchFlushNs;
+            return Math.min(estimateFirstBatchFlushNs, cap);
         }
         if (estimateSubmissionTime != null && estimateSubmissionTime > 0) {
-            return Math.min(Math.max(300_000L, (long) (0.25 * estimateSubmissionTime)), 1_500_000L);
+            return Math.min(Math.max(300_000L, (long) (0.25 * estimateSubmissionTime)), cap);
         }
-        return 800_000L; // default 0.80ms
+        return 600_000L; // default 0.60ms
     }
 
     public void updateGpuTime(long gpuTimeNs) {
@@ -173,20 +181,21 @@ public class ReflexScheduler {
         updateSubmissionTime(subDuration);
 
         // --- Hybrid Architecture: Approach 1 + Approach 3 for First Batch Flush ---
-        // Approach 3 (Dynamic Baseline Ratio): 25% of submission duration, clamped [0.3ms, 1.5ms]
-        long baselineFlushNs = Math.min(Math.max(400_000L, (long) (0.40 * subDuration)), 2_000_000L);
+        // Approach 3 (Dynamic Baseline Ratio): 25% of submission duration, clamped [0.25ms, 1.0ms]
+        long baselineFlushNs = Math.min(Math.max(250_000L, (long) (0.25 * subDuration)), 1_000_000L);
         if (subDuration > 0 && baselineFlushNs > subDuration) {
-            baselineFlushNs = (long) (0.5 * subDuration);
+            baselineFlushNs = (long) (0.4 * subDuration);
         }
 
-        // Approach 1 (Online Hardware Calibration on 0-Queue / Healthy Frame)
-        // When GPU was not blocked by previous frame (queue == 0), its start timestamp marks when commands arrived!
-        boolean isZeroQueue = col.startTimeSystem != null
+        // Approach 1 (Online Hardware Calibration on True 0-Queue Frame)
+        // Must ensure GPU already finished previous frame BEFORE this frame's submission started,
+        // otherwise gpuStart is gated by previous frame's completion and includes queue delay!
+        boolean trueZeroQueue = col.startTimeSystem != null
                 && lastFrameGpuEndTimeSystem != null
-                && col.startTimeSystem >= (lastFrameGpuEndTimeSystem - 100_000L);
+                && col.renderBuildStartTime > 0
+                && col.renderBuildStartTime >= (lastFrameGpuEndTimeSystem - 100_000L);
 
-        if (isZeroQueue && col.startTimeSystem != null && col.renderBuildStartTime > 0
-                && col.startTimeSystem >= col.renderBuildStartTime) {
+        if (trueZeroQueue && col.startTimeSystem >= col.renderBuildStartTime) {
             long sampleFlushNs = col.startTimeSystem - col.renderBuildStartTime;
             if (sampleFlushNs > 50_000L && sampleFlushNs <= subDuration) {
                 updateFirstBatchFlush(sampleFlushNs);
@@ -205,17 +214,86 @@ public class ReflexScheduler {
         boolean isStarved = false;
         Long estGpu = getEstimateGpuTime();
         boolean isGpuBound = estGpu != null && estimateCpuTime != null && estGpu > estimateCpuTime;
-        boolean didWait = col.waitDurationNs > 200_000L;
+        long gap = (lastFrameGpuEndTimeSystem != null && col.startTimeSystem != null)
+                ? (col.startTimeSystem - lastFrameGpuEndTimeSystem)
+                : 0L;
+        long queueNs = (col.startTimeSystem != null && col.renderBuildEndTime > 0 && col.startTimeSystem > col.renderBuildEndTime)
+                ? (col.startTimeSystem - col.renderBuildEndTime)
+                : 0L;
 
-        if (lastFrameGpuEndTimeSystem != null && isGpuBound) {
-            long gap = col.startTimeSystem - lastFrameGpuEndTimeSystem;
-            // Starvation requires meaningful GPU idle gap (>1.0ms) on a frame where Reflex delayed
-            if (didWait && gap > 1_000_000L) {
-                isStarved = true;
-                handleGpuStarvation(gap, col.waitDurationNs, pureCpuDuration);
-            } else if (didWait && gap <= 1_000_000L) {
-                long queueNs = (col.startTimeSystem != null && col.renderBuildEndTime > 0 && col.startTimeSystem > col.renderBuildEndTime) ? (col.startTimeSystem - col.renderBuildEndTime) : 0L;
-                handleHealthyFrame(queueNs);
+        // Feedback closed-loop: evaluate per frame, but only when:
+        // 1. We are in GPU-bound mode
+        // 2. Reflex actually executed a wait on this frame (didWait == true), so timing is governed by Reflex!
+        //    (In menus, loading screens, or CPU-bound states where wait=0, Reflex is passive and must not adjust margin)
+        // 3. Previous adjustment's feedback has arrived (col.frameId >= lastAdjustedTargetFrameId)
+        boolean didWait = col.waitDurationNs > 100_000L;
+        if (ModConfig.INSTANCE.isAdaptiveMargin() && isGpuBound && didWait && lastFrameGpuEndTimeSystem != null && col.frameId >= lastAdjustedTargetFrameId) {
+            boolean hasQueue = queueNs > 300_000L; // commands were already waiting in driver queue (> 0.3ms)
+            // Real starvation: GPU had idle gap AND had NO queued commands waiting!
+            // If commands were queued, any minor inter-frame gap is purely driver/GPU dispatch overhead, NOT Reflex starvation.
+            boolean isGpuIdle = (gap > 200_000L) && !hasQueue;
+            boolean isCpuSpike = (estimateCpuTime != null && (pureCpuDuration - estimateCpuTime > 1_500_000L || pureCpuDuration > 1.30 * estimateCpuTime));
+
+            if (isGpuIdle) {
+                if (isCpuSpike) {
+                    if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                        ReflexClient.LOGGER.info(String.format(
+                                Locale.ROOT,
+                                "[Reflex Adaptive] GPU idle ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Margin preserved: %.3fms",
+                                pureCpuDuration / 1_000_000.0,
+                                (estimateCpuTime != null ? estimateCpuTime : pureCpuDuration) / 1_000_000.0,
+                                adaptiveMarginNs / 1_000_000.0));
+                    }
+                    // Wait for next non-spike frame to evaluate
+                    lastAdjustedTargetFrameId = currentFrameId + 1;
+                } else {
+                    // 空载向上: True GPU starvation caused by over-delay
+                    isStarved = true;
+                    long prevMargin = adaptiveMarginNs;
+                    long stepUp = Math.min(100_000L, Math.max(30_000L, gap / 2));
+                    adaptiveMarginNs = Math.min(2_000_000L, adaptiveMarginNs + stepUp); // cap at 2.0ms
+                    lastAdjustedTargetFrameId = currentFrameId + 1;
+
+                    if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                        ReflexClient.LOGGER.info(String.format(
+                                Locale.ROOT,
+                                "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, frame=#%d). Margin adjusted UP: +%.3fms -> %.3fms (Next eval: Frame #%d)",
+                                gap / 1_000_000.0,
+                                col.waitDurationNs / 1_000_000.0,
+                                col.frameId,
+                                (adaptiveMarginNs - prevMargin) / 1_000_000.0,
+                                adaptiveMarginNs / 1_000_000.0,
+                                lastAdjustedTargetFrameId));
+                    }
+                }
+            } else if (hasQueue || gap <= 200_000L) {
+                // 满载向下: Either queue backlog exists, or GPU seamless load without starvation
+                long prevMargin = adaptiveMarginNs;
+                long stepDown;
+                if (queueNs > 1_000_000L) {
+                    stepDown = 50_000L; // fast drain for queue backlog > 1.0ms
+                } else if (queueNs > 300_000L) {
+                    stepDown = 30_000L; // moderate drain for queue backlog > 0.3ms
+                } else {
+                    stepDown = 10_000L; // fine probing at near-zero queue
+                }
+                adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - stepDown); // allow negative down to -5.0ms
+                lastAdjustedTargetFrameId = currentFrameId + 1;
+
+                if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                    ReflexClient.LOGGER.info(String.format(
+                            Locale.ROOT,
+                            "[Reflex Adaptive] GPU full-load (gap=%.2fms, Q=%.2fms, frame=#%d). Margin adjusted DOWN: -%.3fms -> %.3fms (Next eval: Frame #%d)",
+                            gap / 1_000_000.0,
+                            queueNs / 1_000_000.0,
+                            col.frameId,
+                            (prevMargin - adaptiveMarginNs) / 1_000_000.0,
+                            adaptiveMarginNs / 1_000_000.0,
+                            lastAdjustedTargetFrameId));
+                }
+            } else {
+                // Large gap without wait (e.g. pause menu or FPS capped): preserve margin
+                lastAdjustedTargetFrameId = currentFrameId + 1;
             }
         }
         lastFrameGpuEndTimeSystem = col.endTimeSystem;
@@ -232,76 +310,6 @@ public class ReflexScheduler {
                 getEffectiveSafetyMarginNs(),
                 isStarved
         );
-    }
-
-    private void handleGpuStarvation(long gapNs, long waitNs, long actualCpuNs) {
-        if (!ModConfig.INSTANCE.isAdaptiveMargin()) {
-            return;
-        }
-        double gapMs = gapNs / 1_000_000.0;
-        double waitMs = waitNs / 1_000_000.0;
-        double cpuMs = actualCpuNs / 1_000_000.0;
-        double avgCpuMs = (estimateCpuTime != null ? estimateCpuTime : actualCpuNs) / 1_000_000.0;
-        double prevMarginMs = adaptiveMarginNs / 1_000_000.0;
-
-        // If CPU took noticeably longer than normal, it is a CPU spike, not over-delayed
-        if (estimateCpuTime != null && (actualCpuNs - estimateCpuTime > 1_500_000L || actualCpuNs > 1.30 * estimateCpuTime)) {
-            if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
-                ReflexClient.LOGGER.info(String.format(
-                        Locale.ROOT,
-                        "[Reflex Adaptive] GPU starvation ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Margin preserved: %.2fms",
-                        cpuMs, avgCpuMs, prevMarginMs));
-            }
-            healthyFramesCount = 0;
-            return;
-        }
-
-        adaptiveMarginNs = Math.min(1_500_000L, adaptiveMarginNs + 100_000L); // +0.10ms, cap at 1.5ms
-        double newMarginMs = adaptiveMarginNs / 1_000_000.0;
-        healthyFramesCount = 0;
-
-        if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
-            ReflexClient.LOGGER.info(String.format(
-                    Locale.ROOT,
-                    "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, cpu=%.2fms). Cause: Over-delayed. Adjusting margin: +0.10ms -> %.2fms",
-                    gapMs, waitMs, cpuMs, newMarginMs));
-        }
-    }
-
-    private void handleHealthyFrame(long queueNs) {
-        if (!ModConfig.INSTANCE.isAdaptiveMargin()) {
-            return;
-        }
-        healthyFramesCount++;
-
-        // If there is persistent queue backlog (> 0.5ms), proactively decay margin into negative
-        if (queueNs > 500_000L) {
-            if (healthyFramesCount >= 10) { // faster response for queue backlog
-                healthyFramesCount = 0;
-                if (adaptiveMarginNs > -5_000_000L) { // allow negative margin down to -5.00ms
-                    adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - 50_000L); // step down by -0.050ms
-                    double newMarginMs = adaptiveMarginNs / 1_000_000.0;
-                    if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
-                        ReflexClient.LOGGER.info(String.format(
-                                Locale.ROOT,
-                                "[Reflex Adaptive] Queue backlog detected (Q=%.2fms). Margin adjusted: -0.050ms -> %.3fms",
-                                queueNs / 1_000_000.0, newMarginMs));
-                    }
-                }
-            }
-        } else if (healthyFramesCount >= 30) {
-            healthyFramesCount = 0;
-            if (adaptiveMarginNs > -5_000_000L) { // proactive downward probing: explore lower latency & trigger flush calibration
-                adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - 20_000L); // probe down by -0.020ms
-                double newMarginMs = adaptiveMarginNs / 1_000_000.0;
-                if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
-                    ReflexClient.LOGGER.info(String.format(
-                            Locale.ROOT,
-                            "[Reflex Adaptive] Zero queue healthy. Probing lower margin: -0.020ms -> %.3fms",
-                            newMarginMs));
-                }
-            }
-        }
     }
 
     private Long calculateWaitTime() {
@@ -395,7 +403,9 @@ public class ReflexScheduler {
     }
 
     public void startFrame(long cpuStartTime, long waitNs) {
+        currentFrameId++;
         GpuTimeCollector collector = collectorPool.borrow();
+        collector.frameId = currentFrameId;
         collector.cpuStartTime = cpuStartTime;
         collector.waitDurationNs = waitNs;
         gpuTimeCollectorDeque.addLast(collector);
