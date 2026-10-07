@@ -79,8 +79,8 @@ public class ReflexScheduler {
 
     public void updateFirstBatchFlush(long flushNs) {
         long cap = (estimateSubmissionTime != null && estimateSubmissionTime > 0)
-                ? Math.max(300_000L, (long) (0.50 * estimateSubmissionTime))
-                : 1_200_000L;
+                ? estimateSubmissionTime
+                : 3_000_000L;
         long clamped = Math.min(flushNs, cap);
         if (estimateFirstBatchFlushNs == null) {
             estimateFirstBatchFlushNs = clamped;
@@ -90,14 +90,14 @@ public class ReflexScheduler {
     }
 
     public long getEffectiveFirstBatchFlushNs() {
-        long cap = (estimateSubmissionTime != null && estimateSubmissionTime > 0)
-                ? Math.max(300_000L, (long) (0.50 * estimateSubmissionTime))
-                : 1_200_000L;
         if (estimateFirstBatchFlushNs != null) {
-            return Math.min(estimateFirstBatchFlushNs, cap);
+            if (estimateSubmissionTime != null && estimateSubmissionTime > 0) {
+                return Math.min(estimateFirstBatchFlushNs, estimateSubmissionTime);
+            }
+            return estimateFirstBatchFlushNs;
         }
         if (estimateSubmissionTime != null && estimateSubmissionTime > 0) {
-            return Math.min(Math.max(300_000L, (long) (0.25 * estimateSubmissionTime)), cap);
+            return Math.min(Math.max(300_000L, (long) (0.35 * estimateSubmissionTime)), estimateSubmissionTime);
         }
         return 600_000L; // default 0.60ms
     }
@@ -185,11 +185,8 @@ public class ReflexScheduler {
         updateSubmissionTime(subDuration);
 
         // --- Hybrid Architecture: Approach 1 + Approach 3 for First Batch Flush ---
-        // Approach 3 (Dynamic Baseline Ratio): 25% of submission duration, clamped [0.25ms, 1.0ms]
-        long baselineFlushNs = Math.min(Math.max(250_000L, (long) (0.25 * subDuration)), 1_000_000L);
-        if (subDuration > 0 && baselineFlushNs > subDuration) {
-            baselineFlushNs = (long) (0.4 * subDuration);
-        }
+        // Approach 3 (Dynamic Baseline Ratio): 35% of submission duration as cold-start fallback
+        long baselineFlushNs = (subDuration > 0) ? (long) (0.35 * subDuration) : 600_000L;
 
         // Approach 1 (Online Hardware Calibration on True 0-Queue Frame)
         // Must ensure GPU already finished previous frame BEFORE this frame's submission started,
