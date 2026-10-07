@@ -8,7 +8,7 @@ public class ReflexClient {
     public static final String MOD_ID = "reflex";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    public static final String VERSION = /*$ mod_version*/ "1.1.0";
+    public static final String VERSION = /*$ mod_version*/ "1.1.1";
     public static final String MINECRAFT = /*$ minecraft*/ "26.2";
 
     public static void init() {
