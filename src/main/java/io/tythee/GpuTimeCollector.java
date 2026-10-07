@@ -3,10 +3,18 @@ package io.tythee;
 import static io.tythee.ReflexClient.LOGGER;
 
 //? if gte_26_2 {
+//? if gte_26_3 {
+/*import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.DeviceInfo;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.commands.GpuQueryPool;
+*///?}
+//? if !gte_26_3 {
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.DeviceInfo;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.GpuQueryPool;
+//?}
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.lang.invoke.MethodHandle;

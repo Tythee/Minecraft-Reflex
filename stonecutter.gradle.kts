@@ -16,6 +16,7 @@ stonecutter parameters {
     // Adds constants to Stonecutter comments (i.e. for `//? if fabric {...`)
     constants {
         match(loader, "fabric", "neoforge")
+        put("gte_26_3", current.parsed >= "26.3")
         put("gte_26_2", current.parsed >= "26.2")
         put("gte_26_1", current.parsed >= "26.1")
         put("lt_26", current.parsed < "26")
@@ -41,7 +42,8 @@ stonecutter parameters {
         when {
             current.parsed < "26" -> "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
             current.parsed < "26.2" -> "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
-            else -> "Lcom/mojang/blaze3d/systems/GpuSurface;present()V"
+            current.parsed < "26.3" -> "Lcom/mojang/blaze3d/systems/GpuSurface;present()V"
+            else -> "Lcom/mojang/renderpearl/api/device/GpuSurface;present()V"
         }
     }\";"
 }

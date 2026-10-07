@@ -12,7 +12,14 @@ import java.util.List;
 
 @Mixin(DebugScreenOverlay.class)
 public abstract class DebugOverlayMixin {
-    //? if gte_26_1 {
+    //? if gte_26_3 {
+    /*@Inject(method = "extractLines", at = @At("HEAD"))
+    private void onExtractLines(net.minecraft.client.gui.GuiGraphicsExtractor extractor, List<String> lines, boolean isLeft, int lineLimit, CallbackInfo ci) {
+        if (isLeft && ModConfig.INSTANCE.isShowLatencyMetrics()) {
+            lines.addAll(ReflexMetrics.getInstance().getMetricsLines());
+        }
+    }
+    *///?} elif gte_26_1 {
     @Inject(method = "extractLines", at = @At("HEAD"))
     private void onExtractLines(net.minecraft.client.gui.GuiGraphicsExtractor extractor, List<String> lines, boolean isLeft, CallbackInfo ci) {
         if (isLeft && ModConfig.INSTANCE.isShowLatencyMetrics()) {

@@ -125,15 +125,27 @@ jobs:
           - loader: "fabric"
             loader_name: "Fabric"
             target: "26.2"
-            display_version: "26.2+"
+            display_version: "26.2"
             game_versions: |
               26.2
           - loader: "neoforge"
             loader_name: "NeoForge"
             target: "26.2"
-            display_version: "26.2+"
+            display_version: "26.2"
             game_versions: |
               26.2
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "26.3"
+            display_version: "26.3+"
+            game_versions: |
+              26.3
+          - loader: "neoforge"
+            loader_name: "NeoForge"
+            target: "26.3"
+            display_version: "26.3+"
+            game_versions: |
+              26.3
 
     steps:
       - name: Checkout Code
