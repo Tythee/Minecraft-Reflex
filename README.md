@@ -87,9 +87,3 @@
    Auto-tunes safety margins (0.1ms ~ 1.5ms) in response to GPU starvation gaps and CPU workload spikes.
 5. **Reflex Software Metrics on F3**:
    Displays real-time PC Latency, Game (CPU), Queue, Render (GPU), Overlap, Wait duration, and Safety Margin on the F3 debug screen.
-
----
-
-### License
-
-LGPL-3.0 License
