@@ -33,7 +33,7 @@ public class ReflexScheduler {
     private final float[] gpuWeights;
 
     // Adaptive closed-loop margin state
-    private long adaptiveMarginNs = 0L; // default 0.00ms
+    private long adaptiveOffsetNs = 0L; // default 0.00ms, range [-5ms, +5ms]
     private long currentFrameId = 0L;
     private long lastAdjustedTargetFrameId = 0L;
     private Long lastFrameGpuEndTimeSystem = null;
@@ -127,11 +127,15 @@ public class ReflexScheduler {
         return (long) weightedSum;
     }
 
-    public long getEffectiveSafetyMarginNs() {
-        if (ModConfig.INSTANCE.isAdaptiveMargin()) {
-            return adaptiveMarginNs;
+    public long getEffectiveOffsetNs() {
+        if (ModConfig.INSTANCE.isAdaptiveOffset()) {
+            return adaptiveOffsetNs;
         }
-        return 0L;
+        return ModConfig.INSTANCE.getManualWaitOffsetNs();
+    }
+
+    public long getEffectiveSafetyMarginNs() {
+        return getEffectiveOffsetNs();
     }
 
     public void checkCompletedQueries() {
@@ -227,7 +231,7 @@ public class ReflexScheduler {
         //    (In menus, loading screens, or CPU-bound states where wait=0, Reflex is passive and must not adjust margin)
         // 3. Previous adjustment's feedback has arrived (col.frameId >= lastAdjustedTargetFrameId)
         boolean didWait = col.waitDurationNs > 100_000L;
-        if (ModConfig.INSTANCE.isAdaptiveMargin() && isGpuBound && didWait && lastFrameGpuEndTimeSystem != null && col.frameId >= lastAdjustedTargetFrameId) {
+        if (ModConfig.INSTANCE.isAdaptiveOffset() && isGpuBound && didWait && lastFrameGpuEndTimeSystem != null && col.frameId >= lastAdjustedTargetFrameId) {
             boolean hasQueue = queueNs > 300_000L; // commands were already waiting in driver queue (> 0.3ms)
             // Real starvation: GPU had idle gap AND had NO queued commands waiting!
             // If commands were queued, any minor inter-frame gap is purely driver/GPU dispatch overhead, NOT Reflex starvation.
@@ -239,60 +243,60 @@ public class ReflexScheduler {
                     if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                         ReflexClient.LOGGER.info(String.format(
                                 Locale.ROOT,
-                                "[Reflex Adaptive] GPU idle ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Margin preserved: %.3fms",
+                                "[Reflex Adaptive] GPU idle ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Offset preserved: %+.3fms",
                                 pureCpuDuration / 1_000_000.0,
                                 (estimateCpuTime != null ? estimateCpuTime : pureCpuDuration) / 1_000_000.0,
-                                adaptiveMarginNs / 1_000_000.0));
+                                adaptiveOffsetNs / 1_000_000.0));
                     }
                     // Wait for next non-spike frame to evaluate
                     lastAdjustedTargetFrameId = currentFrameId + 1;
                 } else {
-                    // 空载向上: True GPU starvation caused by over-delay
+                    // 空载向下: 显卡空转，说明睡过头了！减小 offset 以减少等待时间 (范围: [-5ms, +5ms])
                     isStarved = true;
-                    long prevMargin = adaptiveMarginNs;
-                    long stepUp = Math.min(100_000L, Math.max(30_000L, gap / 2));
-                    adaptiveMarginNs = Math.min(2_000_000L, adaptiveMarginNs + stepUp); // cap at 2.0ms
+                    long prevOffset = adaptiveOffsetNs;
+                    long stepDown = Math.min(100_000L, Math.max(30_000L, gap / 2));
+                    adaptiveOffsetNs = Math.max(-5_000_000L, adaptiveOffsetNs - stepDown);
                     lastAdjustedTargetFrameId = currentFrameId + 1;
 
                     if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                         ReflexClient.LOGGER.info(String.format(
                                 Locale.ROOT,
-                                "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, frame=#%d). Margin adjusted UP: +%.3fms -> %.3fms (Next eval: Frame #%d)",
+                                "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, frame=#%d). Offset adjusted DOWN: -%.3fms -> %+.3fms (Next eval: Frame #%d)",
                                 gap / 1_000_000.0,
                                 col.waitDurationNs / 1_000_000.0,
                                 col.frameId,
-                                (adaptiveMarginNs - prevMargin) / 1_000_000.0,
-                                adaptiveMarginNs / 1_000_000.0,
+                                (prevOffset - adaptiveOffsetNs) / 1_000_000.0,
+                                adaptiveOffsetNs / 1_000_000.0,
                                 lastAdjustedTargetFrameId));
                     }
                 }
             } else if (hasQueue || gap <= 200_000L) {
-                // 满载向下: Either queue backlog exists, or GPU seamless load without starvation
-                long prevMargin = adaptiveMarginNs;
-                long stepDown;
+                // 满载向上: 存在积压排队，需要增加等待时间消灭排队！增加 offset (范围: [-5ms, +5ms])
+                long prevOffset = adaptiveOffsetNs;
+                long stepUp;
                 if (queueNs > 1_000_000L) {
-                    stepDown = 50_000L; // fast drain for queue backlog > 1.0ms
+                    stepUp = 50_000L; // fast drain for queue backlog > 1.0ms
                 } else if (queueNs > 300_000L) {
-                    stepDown = 30_000L; // moderate drain for queue backlog > 0.3ms
+                    stepUp = 30_000L; // moderate drain for queue backlog > 0.3ms
                 } else {
-                    stepDown = 10_000L; // fine probing at near-zero queue
+                    stepUp = 10_000L; // fine probing at near-zero queue
                 }
-                adaptiveMarginNs = Math.max(-5_000_000L, adaptiveMarginNs - stepDown); // allow negative down to -5.0ms
+                adaptiveOffsetNs = Math.min(5_000_000L, adaptiveOffsetNs + stepUp);
                 lastAdjustedTargetFrameId = currentFrameId + 1;
 
                 if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                     ReflexClient.LOGGER.info(String.format(
                             Locale.ROOT,
-                            "[Reflex Adaptive] GPU full-load (gap=%.2fms, Q=%.2fms, frame=#%d). Margin adjusted DOWN: -%.3fms -> %.3fms (Next eval: Frame #%d)",
+                            "[Reflex Adaptive] GPU full-load (gap=%.2fms, Q=%.2fms, frame=#%d). Offset adjusted UP: +%.3fms -> %+.3fms (Next eval: Frame #%d)",
                             gap / 1_000_000.0,
                             queueNs / 1_000_000.0,
                             col.frameId,
-                            (prevMargin - adaptiveMarginNs) / 1_000_000.0,
-                            adaptiveMarginNs / 1_000_000.0,
+                            (adaptiveOffsetNs - prevOffset) / 1_000_000.0,
+                            adaptiveOffsetNs / 1_000_000.0,
                             lastAdjustedTargetFrameId));
                 }
             } else {
-                // Large gap without wait (e.g. pause menu or FPS capped): preserve margin
+                // Large gap without wait (e.g. pause menu or FPS capped): preserve offset
                 lastAdjustedTargetFrameId = currentFrameId + 1;
             }
         }
@@ -307,7 +311,7 @@ public class ReflexScheduler {
                 gpuDuration,
                 overlapNs,
                 col.waitDurationNs,
-                getEffectiveSafetyMarginNs(),
+                getEffectiveOffsetNs(),
                 isStarved
         );
     }
@@ -328,11 +332,11 @@ public class ReflexScheduler {
                 : Math.max(0, estimateCpuTime - (estimateSubmissionTime != null ? estimateSubmissionTime : 0L));
         long flushDelay = getEffectiveFirstBatchFlushNs();
         long leadTime = simTime + flushDelay;
-        long margin = getEffectiveSafetyMarginNs();
+        long offset = getEffectiveOffsetNs();
 
-        // If CPU work alone is longer than or equal to GPU frame time, we are CPU-bound.
+        // If CPU work alone minus offset is longer than or equal to GPU frame time, we are CPU-bound.
         // No queue buildup can happen in front of the GPU; never sleep.
-        if (leadTime + margin >= estGpu) {
+        if (leadTime - offset >= estGpu) {
             return null;
         }
 
@@ -360,11 +364,9 @@ public class ReflexScheduler {
             targetGpuFinish = baseTime + (long) inFlight * estGpu;
         }
 
-        long targetPollTime = targetGpuFinish - leadTime - margin;
+        // Positive offset increases wait time, negative offset decreases wait time
+        long targetPollTime = targetGpuFinish - leadTime + offset;
         long waitTime = targetPollTime - now;
-
-        waitTime += ModConfig.INSTANCE.getManualWaitOffsetNs();
-        waitTime -= ModConfig.INSTANCE.getReduceWaitTime();
 
         // Safety clamp: wait time must never exceed inFlight * estGpu + estGpu, capped at 3 frames
         long maxWait = Math.max(estGpu, (long) Math.min(3, inFlight + 1) * estGpu);

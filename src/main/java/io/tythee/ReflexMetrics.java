@@ -23,7 +23,7 @@ public class ReflexMetrics {
     private long renderLatencyNs = 0;
     private long overlapNs = 0;
     private long waitNs = 0;
-    private long safetyMarginNs = 0;
+    private long safetyOffsetNs = 0;
     private long pcLatencyNs = 0;
 
     private double smoothGameMs = 0;
@@ -35,7 +35,7 @@ public class ReflexMetrics {
     private double smoothOverlapMs = 0;
     private double smoothWaitMs = 0;
     private double smoothPcMs = 0;
-    private double smoothMarginMs = 0;
+    private double smoothOffsetMs = 0;
 
     private int frameCount = 0;
     private int starveCount = 0;
@@ -63,7 +63,7 @@ public class ReflexMetrics {
             long renderNs,
             long overlapNs,
             long waitNs,
-            long marginNs,
+            long offsetNs,
             boolean starved) {
 
         long truePcNs = (col != null && col.endTimeSystem != null && col.endTimeSystem > 0 && col.cpuStartTime > 0)
@@ -94,7 +94,7 @@ public class ReflexMetrics {
         this.renderLatencyNs = renderNs;
         this.overlapNs = overlapNs;
         this.waitNs = waitNs;
-        this.safetyMarginNs = marginNs;
+        this.safetyOffsetNs = offsetNs;
         this.pcLatencyNs = truePcNs;
 
         double gameMs = gameNs / 1_000_000.0;
@@ -105,7 +105,7 @@ public class ReflexMetrics {
         double renderMs = renderNs / 1_000_000.0;
         double overlapMsVal = overlapNs / 1_000_000.0;
         double waitMsVal = waitNs / 1_000_000.0;
-        double marginMsVal = marginNs / 1_000_000.0;
+        double offsetMsVal = offsetNs / 1_000_000.0;
         double pcMs = this.pcLatencyNs / 1_000_000.0;
 
         if (frameCount == 0) {
@@ -117,7 +117,7 @@ public class ReflexMetrics {
             smoothRenderMs = renderMs;
             smoothOverlapMs = overlapMsVal;
             smoothWaitMs = waitMsVal;
-            smoothMarginMs = marginMsVal;
+            smoothOffsetMs = offsetMsVal;
             smoothPcMs = pcMs;
         } else {
             smoothGameMs = ALPHA * gameMs + (1 - ALPHA) * smoothGameMs;
@@ -128,7 +128,7 @@ public class ReflexMetrics {
             smoothRenderMs = ALPHA * renderMs + (1 - ALPHA) * smoothRenderMs;
             smoothOverlapMs = ALPHA * overlapMsVal + (1 - ALPHA) * smoothOverlapMs;
             smoothWaitMs = ALPHA * waitMsVal + (1 - ALPHA) * smoothWaitMs;
-            smoothMarginMs = ALPHA * marginMsVal + (1 - ALPHA) * smoothMarginMs;
+            smoothOffsetMs = ALPHA * offsetMsVal + (1 - ALPHA) * smoothOffsetMs;
             smoothPcMs = ALPHA * pcMs + (1 - ALPHA) * smoothPcMs;
         }
 
@@ -146,7 +146,7 @@ public class ReflexMetrics {
                 String mode = (smoothRenderMs >= smoothGameMs) ? "GPU-Bound" : "CPU-Bound";
                 LOGGER.info(String.format(
                         Locale.ROOT,
-                        "[Reflex Summary] FPS: %.1f | PC Latency: %.2fms | Game(CPU): %.2fms | Queue: +%.2fms | Render(GPU): %.2fms | Overlap: %.2fms | Wait: %.2fms | SafetyMargin: %.2fms | Starve: %d/%d | Mode: %s",
+                        "[Reflex Summary] FPS: %.1f | PC Latency: %.2fms | Game(CPU): %.2fms | Queue: +%.2fms | Render(GPU): %.2fms | Overlap: %.2fms | Wait: %.2fms | Offset: %+.2fms | Starve: %d/%d | Mode: %s",
                         fps,
                         smoothPcMs,
                         smoothGameMs,
@@ -154,7 +154,7 @@ public class ReflexMetrics {
                         smoothRenderMs,
                         smoothOverlapMs,
                         smoothWaitMs,
-                        smoothMarginMs,
+                        smoothOffsetMs,
                         starveCount,
                         framesSinceLastLog,
                         mode));
@@ -218,12 +218,12 @@ public class ReflexMetrics {
 
         List<String> list = new ArrayList<>();
         String status = ModConfig.INSTANCE.isReflexEnabled()
-                ? (ModConfig.INSTANCE.isAdaptiveMargin() ? "§aAdaptive" : "§eFixed")
+                ? (ModConfig.INSTANCE.isAdaptiveOffset() ? "§aAdaptive" : "§eManual")
                 : "§cDisabled";
 
         String pcColor = smoothPcMs < 20.0 ? "§a" : (smoothPcMs < 30.0 ? "§e" : "§c");
         String marginStr = ModConfig.INSTANCE.isReflexEnabled()
-                ? String.format(Locale.ROOT, " §7| Margin: §f%.2fms", smoothMarginMs)
+                ? String.format(Locale.ROOT, " §7| Offset: §f%+.2fms", smoothOffsetMs)
                 : "";
 
         list.add(String.format(Locale.ROOT,
@@ -283,21 +283,26 @@ public class ReflexMetrics {
     public synchronized String getMetricsString() {
         return String.format(
                 Locale.ROOT,
-                "[Reflex] PC: %.1fms | Game: %.1fms | Queue: +%.1fms | Render: %.1fms | Overlap: %.1fms | Wait: %.1fms | Margin: %.2fms (%s)",
+                "[Reflex] PC: %.1fms | Game: %.1fms | Queue: +%.1fms | Render: %.1fms | Overlap: %.1fms | Wait: %.1fms | Offset: %+.2fms (%s)",
                 smoothPcMs,
                 smoothGameMs,
                 smoothQueueMs,
                 smoothRenderMs,
                 smoothOverlapMs,
                 smoothWaitMs,
-                smoothMarginMs,
+                smoothOffsetMs,
                 ModConfig.INSTANCE.isReflexEnabled()
-                        ? (ModConfig.INSTANCE.isAdaptiveMargin() ? "Adaptive" : "Fixed")
+                        ? (ModConfig.INSTANCE.isAdaptiveOffset() ? "Adaptive" : "Manual")
                         : "Disabled");
     }
 
+    public synchronized double getSmoothOffsetMs() {
+        return smoothOffsetMs;
+    }
+
+    @Deprecated
     public synchronized double getSmoothMarginMs() {
-        return smoothMarginMs;
+        return smoothOffsetMs;
     }
 
     public synchronized double getSmoothPcMs() {

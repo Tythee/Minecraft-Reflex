@@ -11,12 +11,11 @@ public class ModConfig {
     public static ModConfig INSTANCE = load();
 
     private boolean reflexEnabled = true;
-    private boolean adaptiveMargin = true;
+    private boolean adaptiveOffset = true;
     private boolean showLatencyMetrics = true;
     private boolean timelineDiagram = true;
     private boolean enableDiagnosticLogging = isDevEnvironment();
-    private long manualWaitOffsetNs = 0;
-    private long reduceWaitTime = 0;
+    private double manualWaitOffsetMs = 0.0;
 
     public boolean isReflexEnabled() {
         return reflexEnabled;
@@ -26,12 +25,21 @@ public class ModConfig {
         this.reflexEnabled = enabled;
     }
 
+    public boolean isAdaptiveOffset() {
+        return adaptiveOffset;
+    }
+
+    public void setAdaptiveOffset(boolean adaptiveOffset) {
+        this.adaptiveOffset = adaptiveOffset;
+    }
+
+    // Alias for backward compatibility
     public boolean isAdaptiveMargin() {
-        return adaptiveMargin;
+        return isAdaptiveOffset();
     }
 
     public void setAdaptiveMargin(boolean adaptiveMargin) {
-        this.adaptiveMargin = adaptiveMargin;
+        setAdaptiveOffset(adaptiveMargin);
     }
 
     public boolean isTimelineDiagram() {
@@ -58,20 +66,20 @@ public class ModConfig {
         this.enableDiagnosticLogging = enableDiagnosticLogging;
     }
 
+    public double getManualWaitOffsetMs() {
+        return manualWaitOffsetMs;
+    }
+
+    public void setManualWaitOffsetMs(double manualWaitOffsetMs) {
+        this.manualWaitOffsetMs = manualWaitOffsetMs;
+    }
+
     public long getManualWaitOffsetNs() {
-        return manualWaitOffsetNs;
+        return (long) (manualWaitOffsetMs * 1_000_000.0);
     }
 
     public void setManualWaitOffsetNs(long manualWaitOffsetNs) {
-        this.manualWaitOffsetNs = manualWaitOffsetNs;
-    }
-
-    public long getReduceWaitTime() {
-        return reduceWaitTime;
-    }
-
-    public void setReduceWaitTime(long reduceWaitTime) {
-        this.reduceWaitTime = reduceWaitTime;
+        this.manualWaitOffsetMs = manualWaitOffsetNs / 1_000_000.0;
     }
 
     public static ModConfig load() {
@@ -82,6 +90,18 @@ public class ModConfig {
                 String json = new String(Files.readAllBytes(configFile.toPath()));
                 ModConfig config = gson.fromJson(json, ModConfig.class);
                 if (config != null) {
+                    if (config.manualWaitOffsetMs == 0.0 && json.contains("\"manualWaitOffsetNs\"")) {
+                        try {
+                            com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+                            if (obj.has("manualWaitOffsetNs") && !obj.has("manualWaitOffsetMs")) {
+                                config.manualWaitOffsetMs = obj.get("manualWaitOffsetNs").getAsLong() / 1_000_000.0;
+                            }
+                            if (obj.has("adaptiveMargin") && !obj.has("adaptiveOffset")) {
+                                config.adaptiveOffset = obj.get("adaptiveMargin").getAsBoolean();
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
                     return config;
                 }
             } catch (Exception e) {

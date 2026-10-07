@@ -29,11 +29,11 @@ public class ConfigScreen {
 
         generalCategory.addEntry(
                 entryBuilder.startBooleanToggle(
-                                Component.literal("自适应动态闭环 (Adaptive Margin)"),
-                                ModConfig.INSTANCE.isAdaptiveMargin())
+                                Component.literal("自适应动态闭环 (Adaptive Offset)"),
+                                ModConfig.INSTANCE.isAdaptiveOffset())
                         .setDefaultValue(true)
-                        .setTooltip(Component.literal("自动检测 GPU 饥饿与队列堆积，动态微调安全裕量，无需手动配置纳秒数值"))
-                        .setSaveConsumer(ModConfig.INSTANCE::setAdaptiveMargin)
+                        .setTooltip(Component.literal("自动检测 GPU 饥饿与队列堆积，动态微调等待偏置（开启时将覆盖手动偏置）"))
+                        .setSaveConsumer(ModConfig.INSTANCE::setAdaptiveOffset)
                         .build());
 
         generalCategory.addEntry(
@@ -64,12 +64,14 @@ public class ConfigScreen {
                         .build());
 
         generalCategory.addEntry(
-                entryBuilder.startLongField(
-                                Component.literal("手动等待偏置 (纳秒)"),
-                                ModConfig.INSTANCE.getManualWaitOffsetNs())
-                        .setDefaultValue(0L)
-                        .setTooltip(Component.literal("为计算出的等待时间增加手动纳秒偏置，正数减少等待，负数增加等待"))
-                        .setSaveConsumer(ModConfig.INSTANCE::setManualWaitOffsetNs)
+                entryBuilder.startDoubleField(
+                                Component.literal("手动等待偏置 (毫秒)"),
+                                ModConfig.INSTANCE.getManualWaitOffsetMs())
+                        .setDefaultValue(0.0d)
+                        .setMin(-5.0d)
+                        .setMax(5.0d)
+                        .setTooltip(Component.literal("为计算出的等待时间增加手动偏置，正数增加等待时间，负数减少等待时间 (单位: ms)"))
+                        .setSaveConsumer(ModConfig.INSTANCE::setManualWaitOffsetMs)
                         .build());
 
         return builder.build();
