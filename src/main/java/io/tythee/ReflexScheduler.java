@@ -343,8 +343,10 @@ public class ReflexScheduler {
         // Use simulation, flushDelay, and estGpu to estimate when each queued frame will actually finish.
         // If there really are multiple frames queued, each uncompleted frame naturally adds one estGpu!
         // If a frame already finished in the past (as in CPU-bound or low load), it will NOT add future time.
-        long gpuTimeline = (lastFrameGpuEndTimeSystem != null && lastFrameGpuEndTimeSystem > now - 3 * estGpu)
-                ? lastFrameGpuEndTimeSystem
+        // GPU timeline base: if previous frame is still rendering in the future, start from its completion;
+        // if it already finished in the past (GPU is idle), the earliest future work can start is now!
+        long gpuTimeline = (lastFrameGpuEndTimeSystem != null)
+                ? Math.max(now, lastFrameGpuEndTimeSystem)
                 : now;
 
         for (GpuTimeCollector col : gpuTimeCollectorDeque) {
