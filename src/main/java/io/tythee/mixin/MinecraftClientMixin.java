@@ -25,7 +25,7 @@ public abstract class MinecraftClientMixin {
     private static final String FLIP_FRAME_TARGET = /*$ flip_frame_target*/ "Lcom/mojang/blaze3d/systems/GpuSurface;present()V";
 
     @Unique
-    private static final String GAME_RENDERER_RENDER = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V";
+    private static final String GAME_RENDERER_RENDER = /*$ game_renderer_render_target*/ "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V";
 
     @Inject(
             method = "run",

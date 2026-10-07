@@ -29,15 +29,19 @@ stonecutter parameters {
     swaps["render_frame_method"] = "\"${if (current.parsed < "26") "runTick(Z)V" else "renderFrame(Z)V"}\";"
 
     swaps["frame_start_target"] = "\"${
-        if (current.parsed < "26") "Lnet/minecraft/client/Minecraft;runTick(Z)V"
-        else "Lcom/mojang/blaze3d/systems/RenderSystem;pollEvents()V"
+        when {
+            current.parsed < "26" -> "Lnet/minecraft/client/Minecraft;runTick(Z)V"
+            current.parsed < "26.3" -> "Lcom/mojang/blaze3d/systems/RenderSystem;pollEvents()V"
+            else -> "Lcom/mojang/blaze3d/systems/RenderSystem;pollEvents(Lcom/mojang/blaze3d/platform/SDLEventHandler;)V"
+        }
     }\";"
 
     // The frame-present call site keeps getting renamed by Mojang release to release:
     // (verified by disassembling Minecraft#runTick/renderFrame on each target version):
     //   <26     Window#updateDisplay(TracyFrameCapture)
     //   26.1.x  RenderSystem#flipFrame(TracyFrameCapture)
-    //   26.2+   GpuSurface#present()  (no longer takes the capture object)
+    //   26.2    GpuSurface#present() (Blaze3D)
+    //   26.3+   GpuSurface#present() (RenderPearl)
     swaps["flip_frame_target"] = "\"${
         when {
             current.parsed < "26" -> "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
@@ -45,6 +49,11 @@ stonecutter parameters {
             current.parsed < "26.3" -> "Lcom/mojang/blaze3d/systems/GpuSurface;present()V"
             else -> "Lcom/mojang/renderpearl/api/device/GpuSurface;present()V"
         }
+    }\";"
+
+    swaps["game_renderer_render_target"] = "\"${
+        if (current.parsed < "26.3") "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"
+        else "Lnet/minecraft/client/renderer/GameRenderer;render()V"
     }\";"
 }
 
