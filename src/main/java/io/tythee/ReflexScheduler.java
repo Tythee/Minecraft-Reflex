@@ -212,71 +212,75 @@ public class ReflexScheduler {
         overlapNs = Math.min(overlapNs, gpuDuration);
         updateOverlapTime(overlapNs);
 
-        boolean isStarved = false;
         Long estGpu = getEstimateGpuTime();
         boolean isGpuBound = estGpu != null && estimateCpuTime != null && estGpu > estimateCpuTime;
-        long gap = (lastFrameGpuEndTimeSystem != null && col.startTimeSystem != null)
-                ? (col.startTimeSystem - lastFrameGpuEndTimeSystem)
+
+        // 睡过头多少时间 (Oversleep / GPU 空转时长): 显卡在两帧之间的闲置间隙
+        long oversleepNs = (lastFrameGpuEndTimeSystem != null && col.startTimeSystem != null)
+                ? Math.max(0L, col.startTimeSystem - lastFrameGpuEndTimeSystem)
                 : 0L;
-        long queueNs = (col.startTimeSystem != null && col.renderBuildEndTime > 0 && col.startTimeSystem > col.renderBuildEndTime)
-                ? (col.startTimeSystem - col.renderBuildEndTime)
+
+        // 首批指令到达驱动/GPU的预估时刻
+        long estFlushPoint = (col.renderBuildStartTime > 0)
+                ? (col.renderBuildStartTime + flushDelay)
+                : (col.cpuStartTime + simDuration + flushDelay);
+
+        // 指令在驱动队列排队时长 (允许为负: 因为 Flush 为估计值，负数表示 GPU 在预估 Flush 之前就已开工，排队时长越小越好)
+        long queueNs = (col.startTimeSystem != null)
+                ? (col.startTimeSystem - estFlushPoint)
                 : 0L;
+
+        boolean didWait = col.waitDurationNs > 100_000L;
+        boolean isCpuSpike = (estimateCpuTime != null && (pureCpuDuration - estimateCpuTime > 1_500_000L || pureCpuDuration > 1.30 * estimateCpuTime));
+        boolean isStarved = isGpuBound && didWait && (oversleepNs > 200_000L) && !isCpuSpike;
 
         // Feedback closed-loop: evaluate per frame, but only when:
         // 1. We are in GPU-bound mode
         // 2. Reflex actually executed a wait on this frame (didWait == true), so timing is governed by Reflex!
-        //    (In menus, loading screens, or CPU-bound states where wait=0, Reflex is passive and must not adjust margin)
         // 3. Previous adjustment's feedback has arrived (col.frameId >= lastAdjustedTargetFrameId)
-        boolean didWait = col.waitDurationNs > 100_000L;
         if (ModConfig.INSTANCE.isAdaptiveOffset() && isGpuBound && didWait && lastFrameGpuEndTimeSystem != null && col.frameId >= lastAdjustedTargetFrameId) {
-            boolean hasQueue = queueNs > 300_000L; // commands were already waiting in driver queue (> 0.3ms)
-            // Real starvation: GPU had idle gap AND had NO queued commands waiting!
-            // If commands were queued, any minor inter-frame gap is purely driver/GPU dispatch overhead, NOT Reflex starvation.
-            boolean isGpuIdle = (gap > 200_000L) && !hasQueue;
-            boolean isCpuSpike = (estimateCpuTime != null && (pureCpuDuration - estimateCpuTime > 1_500_000L || pureCpuDuration > 1.30 * estimateCpuTime));
+            boolean hasQueue = queueNs > 150_000L;
+            boolean isOversleep = (oversleepNs > 200_000L) && !hasQueue;
 
-            if (isGpuIdle) {
-                if (isCpuSpike) {
-                    if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
-                        ReflexClient.LOGGER.info(String.format(
-                                Locale.ROOT,
-                                "[Reflex Adaptive] GPU idle ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Offset preserved: %+.3fms",
-                                pureCpuDuration / 1_000_000.0,
-                                (estimateCpuTime != null ? estimateCpuTime : pureCpuDuration) / 1_000_000.0,
-                                adaptiveOffsetNs / 1_000_000.0));
-                    }
-                    // Wait for next non-spike frame to evaluate
-                    lastAdjustedTargetFrameId = currentFrameId + 1;
-                } else {
-                    // 空载向下: 显卡空转，说明睡过头了！减小 offset 以减少等待时间 (范围: [-5ms, +5ms])
-                    isStarved = true;
-                    long prevOffset = adaptiveOffsetNs;
-                    long stepDown = Math.min(100_000L, Math.max(30_000L, gap / 2));
-                    adaptiveOffsetNs = Math.max(-5_000_000L, adaptiveOffsetNs - stepDown);
-                    lastAdjustedTargetFrameId = currentFrameId + 1;
-
-                    if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
-                        ReflexClient.LOGGER.info(String.format(
-                                Locale.ROOT,
-                                "[Reflex Adaptive] GPU starvation detected (gap=%.2fms, wait=%.2fms, frame=#%d). Offset adjusted DOWN: -%.3fms -> %+.3fms (Next eval: Frame #%d)",
-                                gap / 1_000_000.0,
-                                col.waitDurationNs / 1_000_000.0,
-                                col.frameId,
-                                (prevOffset - adaptiveOffsetNs) / 1_000_000.0,
-                                adaptiveOffsetNs / 1_000_000.0,
-                                lastAdjustedTargetFrameId));
-                    }
+            if (isCpuSpike) {
+                if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                    ReflexClient.LOGGER.info(String.format(
+                            Locale.ROOT,
+                            "[Reflex Adaptive] GPU idle ignored due to CPU spike (cpu=%.2fms, avg=%.2fms). Offset preserved: %+.3fms",
+                            pureCpuDuration / 1_000_000.0,
+                            (estimateCpuTime != null ? estimateCpuTime : pureCpuDuration) / 1_000_000.0,
+                            adaptiveOffsetNs / 1_000_000.0));
                 }
-            } else if (hasQueue || gap <= 200_000L) {
-                // 满载向上: 存在积压排队，需要增加等待时间消灭排队！增加 offset (范围: [-5ms, +5ms])
+                lastAdjustedTargetFrameId = currentFrameId + 1;
+            } else if (isOversleep) {
+                // 睡过头了 (显卡空转且未积压指令): 超过物理硬件底线 (0.2ms)，说明睡太久了！下调 Offset (减少等待时间)，压低睡过头时间
+                isStarved = true;
+                long prevOffset = adaptiveOffsetNs;
+                long stepDown = Math.min(100_000L, Math.max(20_000L, oversleepNs / 2));
+                adaptiveOffsetNs = Math.max(-5_000_000L, adaptiveOffsetNs - stepDown);
+                lastAdjustedTargetFrameId = currentFrameId + 1;
+
+                if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
+                    ReflexClient.LOGGER.info(String.format(
+                            Locale.ROOT,
+                            "[Reflex Adaptive] Oversleep detected (oversleep=%.2fms, wait=%.2fms, frame=#%d). Offset adjusted DOWN: -%.3fms -> %+.3fms (Next eval: Frame #%d)",
+                            oversleepNs / 1_000_000.0,
+                            col.waitDurationNs / 1_000_000.0,
+                            col.frameId,
+                            (prevOffset - adaptiveOffsetNs) / 1_000_000.0,
+                            adaptiveOffsetNs / 1_000_000.0,
+                            lastAdjustedTargetFrameId));
+                }
+            } else if (queueNs > 100_000L) {
+                // 队列积压: 指令在驱动积压等待，queue指标越小越好！上调 Offset (增加等待时间)，将 Queue 压向零或负数
                 long prevOffset = adaptiveOffsetNs;
                 long stepUp;
                 if (queueNs > 1_000_000L) {
                     stepUp = 50_000L; // fast drain for queue backlog > 1.0ms
                 } else if (queueNs > 300_000L) {
-                    stepUp = 30_000L; // moderate drain for queue backlog > 0.3ms
+                    stepUp = 25_000L; // moderate drain for queue backlog > 0.3ms
                 } else {
-                    stepUp = 10_000L; // fine probing at near-zero queue
+                    stepUp = 10_000L; // fine tuning towards <= 0.1ms
                 }
                 adaptiveOffsetNs = Math.min(5_000_000L, adaptiveOffsetNs + stepUp);
                 lastAdjustedTargetFrameId = currentFrameId + 1;
@@ -284,16 +288,16 @@ public class ReflexScheduler {
                 if (ModConfig.INSTANCE.isEnableDiagnosticLogging()) {
                     ReflexClient.LOGGER.info(String.format(
                             Locale.ROOT,
-                            "[Reflex Adaptive] GPU full-load (gap=%.2fms, Q=%.2fms, frame=#%d). Offset adjusted UP: +%.3fms -> %+.3fms (Next eval: Frame #%d)",
-                            gap / 1_000_000.0,
+                            "[Reflex Adaptive] Queue backlog (Q=%+.2fms, oversleep=%.2fms, frame=#%d). Offset adjusted UP: +%.3fms -> %+.3fms (Next eval: Frame #%d)",
                             queueNs / 1_000_000.0,
+                            oversleepNs / 1_000_000.0,
                             col.frameId,
                             (adaptiveOffsetNs - prevOffset) / 1_000_000.0,
                             adaptiveOffsetNs / 1_000_000.0,
                             lastAdjustedTargetFrameId));
                 }
             } else {
-                // Large gap without wait (e.g. pause menu or FPS capped): preserve offset
+                // 黄金平衡态: Oversleep处于硬件底线内(<=0.2ms)且Queue已最小化(<=0.1ms或为负)，维持当前Offset
                 lastAdjustedTargetFrameId = currentFrameId + 1;
             }
         }
@@ -305,6 +309,8 @@ public class ReflexScheduler {
                 simDuration,
                 subDuration,
                 flushDelay,
+                queueNs,
+                oversleepNs,
                 gpuDuration,
                 overlapNs,
                 col.waitDurationNs,

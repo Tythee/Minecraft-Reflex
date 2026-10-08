@@ -20,6 +20,7 @@ public class ReflexMetrics {
     private long subLatencyNs = 0;
     private long flushLatencyNs = 0;
     private long queueLatencyNs = 0;
+    private long oversleepLatencyNs = 0;
     private long renderLatencyNs = 0;
     private long overlapNs = 0;
     private long waitNs = 0;
@@ -31,6 +32,7 @@ public class ReflexMetrics {
     private double smoothSubMs = 0;
     private double smoothFlushMs = 0;
     private double smoothQueueMs = 0;
+    private double smoothOversleepMs = 0;
     private double smoothRenderMs = 0;
     private double smoothOverlapMs = 0;
     private double smoothWaitMs = 0;
@@ -51,6 +53,8 @@ public class ReflexMetrics {
     private long lastGpuEndTimeSystem = 0;
     private long lastClockOffset = 0;
     private long lastWaitNs = 0;
+    private long lastQueueNs = 0;
+    private long lastOversleepNs = 0;
 
     private static final float ALPHA = 0.15f;
 
@@ -60,6 +64,8 @@ public class ReflexMetrics {
             long simNs,
             long subNs,
             long flushNs,
+            long queueNs,
+            long oversleepNs,
             long renderNs,
             long overlapNs,
             long waitNs,
@@ -69,10 +75,6 @@ public class ReflexMetrics {
         long truePcNs = (col != null && col.endTimeSystem != null && col.endTimeSystem > 0 && col.cpuStartTime > 0)
                 ? Math.max(0, col.endTimeSystem - col.cpuStartTime)
                 : Math.max(0, gameNs + renderNs - overlapNs);
-
-        long queueNs = (col != null && col.startTimeSystem != null && col.renderBuildEndTime > 0 && col.startTimeSystem > col.renderBuildEndTime)
-                ? (col.startTimeSystem - col.renderBuildEndTime)
-                : 0L;
 
         if (col != null) {
             this.lastCpuStartTime = col.cpuStartTime;
@@ -84,6 +86,8 @@ public class ReflexMetrics {
             this.lastGpuEndTimeSystem = (col.endTimeSystem != null) ? col.endTimeSystem : 0;
             this.lastClockOffset = col.clockOffset;
             this.lastWaitNs = col.waitDurationNs;
+            this.lastQueueNs = queueNs;
+            this.lastOversleepNs = oversleepNs;
         }
 
         this.gameLatencyNs = gameNs;
@@ -91,6 +95,7 @@ public class ReflexMetrics {
         this.subLatencyNs = subNs;
         this.flushLatencyNs = flushNs;
         this.queueLatencyNs = queueNs;
+        this.oversleepLatencyNs = oversleepNs;
         this.renderLatencyNs = renderNs;
         this.overlapNs = overlapNs;
         this.waitNs = waitNs;
@@ -102,6 +107,7 @@ public class ReflexMetrics {
         double subMsVal = subNs / 1_000_000.0;
         double flushMsVal = flushNs / 1_000_000.0;
         double queueMsVal = queueNs / 1_000_000.0;
+        double oversleepMsVal = oversleepNs / 1_000_000.0;
         double renderMs = renderNs / 1_000_000.0;
         double overlapMsVal = overlapNs / 1_000_000.0;
         double waitMsVal = waitNs / 1_000_000.0;
@@ -114,6 +120,7 @@ public class ReflexMetrics {
             smoothSubMs = subMsVal;
             smoothFlushMs = flushMsVal;
             smoothQueueMs = queueMsVal;
+            smoothOversleepMs = oversleepMsVal;
             smoothRenderMs = renderMs;
             smoothOverlapMs = overlapMsVal;
             smoothWaitMs = waitMsVal;
@@ -125,6 +132,7 @@ public class ReflexMetrics {
             smoothSubMs = ALPHA * subMsVal + (1 - ALPHA) * smoothSubMs;
             smoothFlushMs = ALPHA * flushMsVal + (1 - ALPHA) * smoothFlushMs;
             smoothQueueMs = ALPHA * queueMsVal + (1 - ALPHA) * smoothQueueMs;
+            smoothOversleepMs = ALPHA * oversleepMsVal + (1 - ALPHA) * smoothOversleepMs;
             smoothRenderMs = ALPHA * renderMs + (1 - ALPHA) * smoothRenderMs;
             smoothOverlapMs = ALPHA * overlapMsVal + (1 - ALPHA) * smoothOverlapMs;
             smoothWaitMs = ALPHA * waitMsVal + (1 - ALPHA) * smoothWaitMs;
@@ -146,11 +154,12 @@ public class ReflexMetrics {
                 String mode = (smoothRenderMs >= smoothGameMs) ? "GPU-Bound" : "CPU-Bound";
                 LOGGER.info(String.format(
                         Locale.ROOT,
-                        "[Reflex Summary] FPS: %.1f | PC Latency: %.2fms | Game(CPU): %.2fms | Queue: +%.2fms | Render(GPU): %.2fms | Overlap: %.2fms | Wait: %.2fms | Offset: %+.2fms | Starve: %d/%d | Mode: %s",
+                        "[Reflex Summary] FPS: %.1f | PC Latency: %.2fms | Game(CPU): %.2fms | Queue: %+.2fms | Oversleep: %.2fms | Render(GPU): %.2fms | Overlap: %.2fms | Wait: %.2fms | Offset: %+.2fms | Starve: %d/%d | Mode: %s",
                         fps,
                         smoothPcMs,
                         smoothGameMs,
                         smoothQueueMs,
+                        smoothOversleepMs,
                         smoothRenderMs,
                         smoothOverlapMs,
                         smoothWaitMs,
@@ -167,7 +176,6 @@ public class ReflexMetrics {
                     long fenceStallNs = Math.max(0, lastRenderSubmitEndTime - lastRenderBuildEndTime);
                     long gpuStartRelNs = lastGpuStartTimeSystem - lastCpuStartTime;
                     long gpuEndRelNs = lastGpuEndTimeSystem - lastCpuStartTime;
-                    long logQueueNs = lastGpuStartTimeSystem - lastRenderBuildEndTime;
                     long gpuWorkNs = Math.max(0, lastGpuEndTimeSystem - lastGpuStartTimeSystem);
                     long trueLogPcNs = Math.max(0, lastGpuEndTimeSystem - lastCpuStartTime);
 
@@ -179,17 +187,14 @@ public class ReflexMetrics {
                     double presentMsVal = presentRelNs / 1_000_000.0;
                     double gpuStartMsVal = gpuStartRelNs / 1_000_000.0;
                     double gpuEndMsVal = gpuEndRelNs / 1_000_000.0;
-                    double logQueueMsVal = logQueueNs / 1_000_000.0;
+                    double logQueueMsVal = lastQueueNs / 1_000_000.0;
+                    double logOversleepMsVal = lastOversleepNs / 1_000_000.0;
                     double gpuWorkMsVal = gpuWorkNs / 1_000_000.0;
                     double truePcMsVal = trueLogPcNs / 1_000_000.0;
 
-                    String queueStatus = (logQueueMsVal >= 0)
-                            ? String.format(Locale.ROOT, "Queue: +%.2fms", logQueueMsVal)
-                            : String.format(Locale.ROOT, "Overlap: %.2fms", -logQueueMsVal);
-
                     LOGGER.info(String.format(
                             Locale.ROOT,
-                            "[Reflex Timestamps] Frame #%d | Wait: %.2fms | Input: T+0.00ms | RenderBuild: T+%.2fms..T+%.2fms | SubmitEnd: T+%.2fms (FenceStall: %.2fms) | PresentEnd: T+%.2fms | GPU: T+%.2fms..T+%.2fms (Work: %.2fms, %s) | True PC Latency: %.2fms | ClockOffset: %dns",
+                            "[Reflex Timestamps] Frame #%d | Wait: %.2fms | Input: T+0.00ms | RenderBuild: T+%.2fms..T+%.2fms | SubmitEnd: T+%.2fms (FenceStall: %.2fms) | PresentEnd: T+%.2fms | GPU: T+%.2fms..T+%.2fms (Work: %.2fms, Queue: %+.2fms, Oversleep: %.2fms) | True PC Latency: %.2fms | ClockOffset: %dns",
                             frameCount,
                             waitSampleMs,
                             renderBuildStartMsVal,
@@ -200,7 +205,8 @@ public class ReflexMetrics {
                             gpuStartMsVal,
                             gpuEndMsVal,
                             gpuWorkMsVal,
-                            queueStatus,
+                            logQueueMsVal,
+                            logOversleepMsVal,
                             truePcMsVal,
                             lastClockOffset));
                 }
@@ -234,14 +240,14 @@ public class ReflexMetrics {
         double subMs = Math.max(0.1, smoothSubMs);
         double flushMs = Math.min(subMs, Math.max(0.1, smoothFlushMs));
         double restSubMs = Math.max(0.0, subMs - flushMs);
-        double queueMs = Math.max(0.0, smoothQueueMs);
+        double queueMs = smoothQueueMs;
         double renderMs = Math.max(0.5, smoothRenderMs);
+        double oversleepMs = Math.max(0.0, smoothOversleepMs);
 
         double cPerMs = smoothPcMs <= 15.0 ? 2.0 : 1.0;
         int simChars = Math.max(1, (int) Math.round(simMs * cPerMs));
         int flushChars = Math.max(1, (int) Math.round(flushMs * cPerMs));
         int restChars = Math.max(1, (int) Math.round(restSubMs * cPerMs));
-        int queueChars = (int) Math.round(queueMs * cPerMs);
         int renderChars = Math.max(2, (int) Math.round(renderMs * cPerMs));
 
         // Line 1: Simulation (starts at T=0)
@@ -255,19 +261,28 @@ public class ReflexMetrics {
                 "§7├─ §9Sub  │ §8%s§3%s§9%s §7(§3Flush: %.1fms §9Rest: %.1fms§7)",
                 subLeadTrack, repeatChar('█', flushChars), repeatChar('█', restChars), flushMs, restSubMs));
 
-        // Line 3: GPU (lead track matches Sim + Flush width to the exact pixel)
-        String gpuLeadTrack = repeatChar('░', simChars + flushChars);
-        String qBar = queueChars > 0 ? String.format("§c%s", repeatChar('▒', queueChars)) : "";
-        String rBar = String.format("§d%s", repeatChar('█', renderChars));
+        // Line 3: GPU execution bar & metrics (Queue can be positive or negative)
+        int flushLeadChars = simChars + flushChars;
+        String qColor = queueMs <= 0.1 ? "§a" : (queueMs <= 0.5 ? "§e" : "§c");
+        String oColor = oversleepMs <= 0.25 ? "§a" : (oversleepMs <= 0.6 ? "§e" : "§c");
 
-        if (queueMs >= 0.1) {
+        if (queueMs >= 0.05) {
+            int queueChars = Math.max(1, (int) Math.round(queueMs * cPerMs));
+            String gpuLeadTrack = repeatChar('░', flushLeadChars);
+            String qBar = String.format("§c%s", repeatChar('▒', queueChars));
+            String rBar = String.format("§d%s", repeatChar('█', renderChars));
             list.add(String.format(Locale.ROOT,
-                    "§7└─ §dGPU  │ §8%s%s%s §7(§cQueue: +%.1fms §dRender: %.1fms§7)",
-                    gpuLeadTrack, qBar, rBar, queueMs, renderMs));
+                    "§7└─ §dGPU  │ §8%s%s%s §7(%sQueue: %+.1fms §dRender: %.1fms §7| %sOversleep: %.1fms§7)",
+                    gpuLeadTrack, qBar, rBar, qColor, queueMs, renderMs, oColor, oversleepMs));
         } else {
+            // Zero or Negative Queue: GPU started at or earlier than estimated flush point
+            int negOffsetChars = (int) Math.round((-queueMs) * cPerMs);
+            int leadChars = Math.max(0, flushLeadChars - negOffsetChars);
+            String gpuLeadTrack = repeatChar('░', leadChars);
+            String rBar = String.format("§d%s", repeatChar('█', renderChars));
             list.add(String.format(Locale.ROOT,
-                    "§7└─ §dGPU  │ §8%s%s §7(§aZero Q §dRender: %.1fms §aOverlap: %.1fms§7)",
-                    gpuLeadTrack, rBar, renderMs, smoothOverlapMs));
+                    "§7└─ §dGPU  │ §8%s%s §7(%sQueue: %+.1fms §dRender: %.1fms §7| %sOversleep: %.1fms§7)",
+                    gpuLeadTrack, rBar, qColor, queueMs, renderMs, oColor, oversleepMs));
         }
 
         return list;
@@ -283,10 +298,11 @@ public class ReflexMetrics {
     public synchronized String getMetricsString() {
         return String.format(
                 Locale.ROOT,
-                "[Reflex] PC: %.1fms | Game: %.1fms | Queue: +%.1fms | Render: %.1fms | Overlap: %.1fms | Wait: %.1fms | Offset: %+.2fms (%s)",
+                "[Reflex] PC: %.1fms | Game: %.1fms | Queue: %+.1fms | Oversleep: %.1fms | Render: %.1fms | Overlap: %.1fms | Wait: %.1fms | Offset: %+.2fms (%s)",
                 smoothPcMs,
                 smoothGameMs,
                 smoothQueueMs,
+                smoothOversleepMs,
                 smoothRenderMs,
                 smoothOverlapMs,
                 smoothWaitMs,
@@ -315,6 +331,10 @@ public class ReflexMetrics {
 
     public synchronized double getSmoothQueueMs() {
         return smoothQueueMs;
+    }
+
+    public synchronized double getSmoothOversleepMs() {
+        return smoothOversleepMs;
     }
 
     public synchronized double getSmoothRenderMs() {

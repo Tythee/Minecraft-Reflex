@@ -50,11 +50,12 @@
 | :--- | :--- |
 | **PC** | **PC 端到端计算延迟**（输入采样到显卡渲染呈现完成：T_pc = GPU完成时刻 - 输入采样时刻） |
 | **Game** | **CPU 耗时**（从输入采样、世界状态更新到渲染指令构建完毕） |
-| **Queue** | **渲染队列滞留时长**（指令在显卡驱动队列中等待执行的积压时间） |
+| **Queue** | **渲染队列滞留时长**（指令在驱动队列积压等待的时间，允许为负，数值越小越好；负数表示 GPU 提前于预估 Flush 开工） |
+| **Oversleep** | **睡过头多少时间**（显卡两帧之间的闲置停顿时间；由于驱动上下文切换与指令提交开销存在微小物理底线，自适应闭环将其压制在物理极小值） |
 | **Render** | **GPU 硬件渲染耗时**（硬件真实执行本帧绘制命令消耗的纳秒时间） |
 | **Overlap** | **管线并行重叠时长**（CPU 绘制提交与显卡硬件执行重叠的时间段） |
 | **Wait** | **Reflex 调度休眠时长**（为对齐输入所主动等待的时间） |
-| **Margin** | **安全裕量**（为防止 GPU 饥饿空转预留的缓冲时长，自适应模式下会自动微调） |
+| **Offset** | **等待偏置**（动态或手动微调休眠时长的偏置量，正数增加等待时间，负数减少等待时间） |
 
 ---
 
@@ -64,10 +65,10 @@
 
 1. **启用 Reflex**（默认开启）：功能总开关。
 2. **时序流程图展示 (Timeline Diagram)**（默认开启）：在 F3 调试面板中以多行流水线流程图直观展示 CPU 与 GPU 的对齐与排队状态。
-3. **自适应动态闭环 (Adaptive Margin)**（默认开启）：全自动动态调节安全裕量，平衡无空转与最低延迟。
+3. **自适应动态闭环 (Adaptive Offset)**（默认开启）：双阈值自适应控制环，在将 Oversleep 压制在物理底线（不空转）的同时，尽可能将 Queue 压向最小甚至负数。
 4. **显示实时延迟指标 (Reflex Metrics)**（默认开启）：在 F3 调试面板注入实时延迟信息。
-5. **启用诊断日志 (Diagnostic Logging)**（默认开启）：每秒聚合向控制台输出一次统计摘要。
-6. **手动等待偏置 (纳秒)**（默认 0）：可选的微调参数，正数减少等待时间，负数增加等待时间。
+5. **启用诊断日志 (Diagnostic Logging)**（开发环境默认开启，生产环境默认关闭）：每秒聚合向控制台输出一次统计摘要。
+6. **手动等待偏置 (毫秒)**（默认 0.0ms）：可选的微调参数，正数增加等待时间，负数减少等待时间 (范围: -5.0ms ~ +5.0ms)。
 
 ---
 
@@ -83,7 +84,7 @@
    Frame pacing sleep executes strictly *before* RenderSystem.pollEvents(), ensuring inputs are freshly polled right after waking up.
 3. **Hardware Decoupled Timing & Overlap Measurement**:
    Measures pure CPU frame time without stalling on GPU fence syncs. Tracks GPU hardware execution and clock offset to compute the true CPU/GPU parallel execution overlap (T_overlap).
-4. **Adaptive Closed-Loop Control**:
-   Auto-tunes safety margins (0.1ms ~ 1.5ms) in response to GPU starvation gaps and CPU workload spikes.
+4. **Dual-Threshold Adaptive Closed-Loop Control**:
+   Auto-tunes wait offset to keep Oversleep at the driver floor (preventing starvation) while driving Queue as low as possible.
 5. **Reflex Software Metrics on F3**:
-   Displays real-time PC Latency, Game (CPU), Queue, Render (GPU), Overlap, Wait duration, and Safety Margin on the F3 debug screen.
+   Displays real-time PC Latency, Game (CPU), Queue (signed), Oversleep, Render (GPU), Overlap, Wait duration, and Offset on the F3 debug screen.
