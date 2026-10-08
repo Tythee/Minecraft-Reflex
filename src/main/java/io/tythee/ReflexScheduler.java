@@ -215,10 +215,14 @@ public class ReflexScheduler {
         Long estGpu = getEstimateGpuTime();
         boolean isGpuBound = estGpu != null && estimateCpuTime != null && estGpu > estimateCpuTime;
 
-        // 睡过头多少时间 (Oversleep / GPU 空转时长): 显卡在两帧之间的闲置间隙
-        long oversleepNs = (lastFrameGpuEndTimeSystem != null && col.startTimeSystem != null)
+        // 显卡在两帧之间的闲置停顿间隙
+        long gpuIdleGap = (lastFrameGpuEndTimeSystem != null && col.startTimeSystem != null)
                 ? Math.max(0L, col.startTimeSystem - lastFrameGpuEndTimeSystem)
                 : 0L;
+
+        // 睡过头多少时间: 考虑 Reflex 实际等待时长，避免把 CPU 逻辑负载或掉帧等非休眠原因误纳入
+        // Oversleep = min(waitTime, GPU Start - Last Frame GPU End)
+        long oversleepNs = Math.min(col.waitDurationNs, gpuIdleGap);
 
         // 首批指令到达驱动/GPU的预估时刻
         long estFlushPoint = (col.renderBuildStartTime > 0)
