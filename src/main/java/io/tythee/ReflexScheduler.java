@@ -142,13 +142,13 @@ public class ReflexScheduler {
         Iterator<GpuTimeCollector> iterator = gpuTimeCollectorDeque.iterator();
         while (iterator.hasNext()) {
             GpuTimeCollector col = iterator.next();
-            if (col.startQueryInserted && col.endQueryInserted) {
-                if (col.checkQuery()) {
+            if (col.startQueryInserted) {
+                col.checkQuery();
+                // 当 end 取到就判定该帧在 GPU 上彻底完成，处理并踢出队列
+                if (col.endTimeSystem != null) {
                     processCompletedFrame(col);
                     iterator.remove();
                     collectorPool.returnObject(col);
-                } else {
-                    break;
                 }
             } else {
                 iterator.remove();
@@ -339,40 +339,33 @@ public class ReflexScheduler {
 
         long now = System.nanoTime();
 
-        // Dynamically simulate GPU execution timeline:
-        // Use simulation, flushDelay, and estGpu to estimate when each queued frame will actually finish.
-        // If there really are multiple frames queued, each uncompleted frame naturally adds one estGpu!
-        // If a frame already finished in the past (as in CPU-bound or low load), it will NOT add future time.
-        // GPU timeline base: if previous frame is still rendering in the future, start from its completion;
-        // if it already finished in the past (GPU is idle), the earliest future work can start is now!
-        long gpuTimeline = (lastFrameGpuEndTimeSystem != null)
-                ? Math.max(now, lastFrameGpuEndTimeSystem)
+        // 初始预估gpu完成时间点为上一帧的end
+        long estGpuFinish = (lastFrameGpuEndTimeSystem != null)
+                ? lastFrameGpuEndTimeSystem
                 : now;
 
+        // 对gpuTimeCollectorDeque进行遍历更新初始预估gpu完成时间点
         for (GpuTimeCollector col : gpuTimeCollectorDeque) {
-            long frameFlushArrival;
+            // 对每个GpuTimeCollector来说，如果有GPU_start时间戳，用GPU_start+estGpu更新预估gpu完成时间点
             if (col.startTimeSystem != null && col.startTimeSystem > 0) {
-                frameFlushArrival = col.startTimeSystem;
-            } else if (col.renderBuildStartTime > 0) {
-                frameFlushArrival = col.renderBuildStartTime + flushDelay;
-            } else if (col.cpuStartTime > 0) {
-                frameFlushArrival = col.cpuStartTime + leadTime;
+                estGpuFinish = col.startTimeSystem + estGpu;
             } else {
-                frameFlushArrival = now;
+                // 没有的话，根据预估gpu完成时间点以及自身flush点处理
+                long flushPoint = (col.renderBuildStartTime > 0)
+                        ? (col.renderBuildStartTime + flushDelay)
+                        : (col.cpuStartTime > 0 ? col.cpuStartTime + leadTime : now);
+
+                // 如果flush点在预估gpu完成时间点之前,预估gpu完成时间点增加一个estGpu，否则更新为flush点+estGpu
+                if (flushPoint < estGpuFinish) {
+                    estGpuFinish = estGpuFinish + estGpu;
+                } else {
+                    estGpuFinish = flushPoint + estGpu;
+                }
             }
-
-            long frameGpuStart = Math.max(gpuTimeline, frameFlushArrival);
-            long frameGpuDuration = (col.endTimeSystem != null && col.startTimeSystem != null && col.endTimeSystem > col.startTimeSystem)
-                    ? (col.endTimeSystem - col.startTimeSystem)
-                    : estGpu;
-
-            gpuTimeline = frameGpuStart + frameGpuDuration;
         }
 
-        long targetGpuFinish = gpuTimeline;
-
-        // Positive offset increases wait time, negative offset decreases wait time
-        long targetPollTime = targetGpuFinish - leadTime + offset;
+        // 最后用得出的预估gpu完成时间点计算wait
+        long targetPollTime = estGpuFinish - leadTime + offset;
         long waitTime = targetPollTime - now;
 
         // Hard upper bound: wait time can never exceed the total GPU work ahead, capped at 3 frames
@@ -388,26 +381,36 @@ public class ReflexScheduler {
     }
 
     public long Wait() {
-        checkCompletedQueries();
         if (!ModConfig.INSTANCE.isReflexEnabled()) {
-            return 0L;
-        }
-
-        Long waitTime = calculateWaitTime();
-        if (waitTime == null || waitTime <= 0) {
+            checkCompletedQueries();
             return 0L;
         }
 
         long startWait = System.nanoTime();
-        long targetTime = startWait + waitTime;
-        // Leave 1.5ms for fine-grained spin-wait to avoid Windows thread scheduling oversleep
-        long coarseSleepNs = waitTime - 1_500_000L;
-        if (coarseSleepNs > 0) {
-            LockSupport.parkNanos(coarseSleepNs);
+
+        // 采用轮询方式，每次睡1ms，因为gpuTimeCollectorDeque随时可能更新
+        while (true) {
+            // 计算wait前，先更新一遍gpuTimeCollectorDeque
+            checkCompletedQueries();
+
+            Long waitTime = calculateWaitTime();
+            if (waitTime == null || waitTime <= 0) {
+                break;
+            }
+
+            // 若剩余等待时间在精细自旋阈值内 (<= 1.2ms)，精确自旋到目标点并退出
+            if (waitTime <= 1_200_000L) {
+                long targetTime = System.nanoTime() + waitTime;
+                while (System.nanoTime() < targetTime) {
+                    Thread.onSpinWait();
+                }
+                break;
+            }
+
+            // 采用轮询方式，每次睡 1ms，随后重新 checkCompletedQueries() 并计算
+            LockSupport.parkNanos(1_000_000L); // 1ms
         }
-        while (System.nanoTime() < targetTime) {
-            Thread.onSpinWait();
-        }
+
         return System.nanoTime() - startWait;
     }
 

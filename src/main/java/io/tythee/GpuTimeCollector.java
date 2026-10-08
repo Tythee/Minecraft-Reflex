@@ -135,36 +135,52 @@ public class GpuTimeCollector {
     }
 
     public boolean checkQuery() {
-        if (!startQueryInserted || !endQueryInserted || queryPool == null) {
+        if (!startQueryInserted || queryPool == null) {
             return false;
         }
         if (isReady) {
             return true;
         }
-        OptionalLong startVal = queryPool.getValue(startSlot);
-        OptionalLong endVal = queryPool.getValue(endSlot);
-        if (startVal.isPresent() && endVal.isPresent()) {
-            GpuDevice device = RenderSystem.getDevice();
-            float period = device.getDeviceInfo().timestampPeriod();
-            long rawStart = startVal.getAsLong();
-            long rawEnd = endVal.getAsLong();
 
-            long rawDuration = Math.max(0, rawEnd - rawStart);
-            long durationNs = (period == 1.0f) ? rawDuration : Math.round(rawDuration * (double) period);
-            startTimeGpu = (period == 1.0f) ? rawStart : Math.round(rawStart * (double) period);
-            endTimeGpu = startTimeGpu + durationNs;
-
-            long offset = getGpuToSystemOffset26(device);
-            if (offset == 0) {
-                offset = cpuStartTime - startTimeGpu;
-            }
-            this.clockOffset = offset;
-            startTimeSystem = startTimeGpu + offset;
-            endTimeSystem = endTimeGpu + offset;
-            isReady = true;
-            return true;
+        GpuDevice device = RenderSystem.tryGetDevice();
+        if (device == null) {
+            return false;
         }
-        return false;
+        float period = device.getDeviceInfo().timestampPeriod();
+
+        // 1. Independently fetch start timestamp
+        if (startTimeSystem == null) {
+            OptionalLong startVal = queryPool.getValue(startSlot);
+            if (startVal.isPresent()) {
+                long rawStart = startVal.getAsLong();
+                startTimeGpu = (period == 1.0f) ? rawStart : Math.round(rawStart * (double) period);
+                long offset = getGpuToSystemOffset26(device);
+                if (offset == 0) {
+                    offset = cpuStartTime - startTimeGpu;
+                }
+                this.clockOffset = offset;
+                startTimeSystem = startTimeGpu + offset;
+            }
+        }
+
+        // 2. Independently fetch end timestamp
+        if (endQueryInserted && endTimeSystem == null) {
+            OptionalLong endVal = queryPool.getValue(endSlot);
+            if (endVal.isPresent()) {
+                long rawEnd = endVal.getAsLong();
+                endTimeGpu = (period == 1.0f) ? rawEnd : Math.round(rawEnd * (double) period);
+                long offset = (this.clockOffset != 0) ? this.clockOffset : getGpuToSystemOffset26(device);
+                this.clockOffset = offset;
+                endTimeSystem = endTimeGpu + offset;
+                if (startTimeSystem == null) {
+                    startTimeSystem = Math.max(0, endTimeSystem - 15_000_000L);
+                }
+                isReady = true;
+                return true;
+            }
+        }
+
+        return isReady;
     }
 
     public void reset() {
@@ -246,29 +262,45 @@ public class GpuTimeCollector {
     }
 
     public boolean checkQuery() {
-        if (!startQueryInserted || !endQueryInserted || startTimeQuery == null || endTimeQuery == null) {
+        if (!startQueryInserted) {
             return false;
         }
         if (isReady) {
             return true;
         }
-        if (GL33C.glGetQueryObjecti64(endTimeQuery, GL33C.GL_QUERY_RESULT_AVAILABLE) == GL_TRUE) {
-            endTimeGpu = GL33C.glGetQueryObjecti64(endTimeQuery, GL33C.GL_QUERY_RESULT);
-            startTimeGpu = GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT);
 
-            GL32C.glDeleteQueries(startTimeQuery);
-            GL32C.glDeleteQueries(endTimeQuery);
-            startTimeQuery = null;
-            endTimeQuery = null;
+        // 1. Independently fetch start timestamp
+        if (startTimeSystem == null && startTimeQuery != null) {
+            if (GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT_AVAILABLE) == GL_TRUE) {
+                startTimeGpu = GL33C.glGetQueryObjecti64(startTimeQuery, GL33C.GL_QUERY_RESULT);
+                GL32C.glDeleteQueries(startTimeQuery);
+                startTimeQuery = null;
 
-            long offset = getGpuToSystemOffset();
-            this.clockOffset = offset;
-            startTimeSystem = startTimeGpu + offset;
-            endTimeSystem = endTimeGpu + offset;
-            isReady = true;
-            return true;
+                long offset = getGpuToSystemOffset();
+                this.clockOffset = offset;
+                startTimeSystem = startTimeGpu + offset;
+            }
         }
-        return false;
+
+        // 2. Independently fetch end timestamp
+        if (endQueryInserted && endTimeSystem == null && endTimeQuery != null) {
+            if (GL33C.glGetQueryObjecti64(endTimeQuery, GL33C.GL_QUERY_RESULT_AVAILABLE) == GL_TRUE) {
+                endTimeGpu = GL33C.glGetQueryObjecti64(endTimeQuery, GL33C.GL_QUERY_RESULT);
+                GL32C.glDeleteQueries(endTimeQuery);
+                endTimeQuery = null;
+
+                long offset = (this.clockOffset != 0) ? this.clockOffset : getGpuToSystemOffset();
+                this.clockOffset = offset;
+                endTimeSystem = endTimeGpu + offset;
+                if (startTimeSystem == null) {
+                    startTimeSystem = Math.max(0, endTimeSystem - 15_000_000L);
+                }
+                isReady = true;
+                return true;
+            }
+        }
+
+        return isReady;
     }
 
     public void reset() {
