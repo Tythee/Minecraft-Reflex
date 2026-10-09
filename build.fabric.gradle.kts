@@ -1,6 +1,7 @@
 plugins {
     // Applies the correct loom variant based on the Minecraft version
     id("dev.kikugie.loom-back-compat")
+    id("tools-regression")
 }
 
 // DO NOT set group = ...!

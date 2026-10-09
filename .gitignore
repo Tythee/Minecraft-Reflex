@@ -40,3 +40,15 @@ replay_*.log
 *.hprof
 *.jfr
 .gradle_home/
+
+# 无头仿真(tools/run-sim.sh)的运行产物
+
+.sim_out/
+.sim_cp.txt
+tools/*.args
+
+# SNBT 离线探针(tools/run-snbt-probe.sh)的运行产物
+
+.snbt_out/
+tools/snbt.args
+tools/snbt.run

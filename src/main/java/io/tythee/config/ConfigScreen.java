@@ -29,19 +29,10 @@ public class ConfigScreen {
 
         generalCategory.addEntry(
                 entryBuilder.startBooleanToggle(
-                                Component.literal("自适应动态闭环 (Adaptive Offset)"),
-                                ModConfig.INSTANCE.isAdaptiveOffset())
-                        .setDefaultValue(true)
-                        .setTooltip(Component.literal("自动检测 GPU 饥饿与队列堆积，动态微调等待偏置（开启时将覆盖手动偏置）"))
-                        .setSaveConsumer(ModConfig.INSTANCE::setAdaptiveOffset)
-                        .build());
-
-        generalCategory.addEntry(
-                entryBuilder.startBooleanToggle(
                                 Component.literal("时序流程图展示 (Timeline Diagram)"),
                                 ModConfig.INSTANCE.isTimelineDiagram())
                         .setDefaultValue(true)
-                        .setTooltip(Component.literal("在 F3 调试面板中以多行流水线时序图直观展示 CPU 与 GPU 的对齐与排队状态"))
+                        .setTooltip(Component.literal("在 F3 调试面板中以多行甘特图逐帧展示各标记的实测位置与对齐质量"))
                         .setSaveConsumer(ModConfig.INSTANCE::setTimelineDiagram)
                         .build());
 
@@ -50,7 +41,7 @@ public class ConfigScreen {
                                 Component.literal("显示实时延迟指标 (Reflex Metrics)"),
                                 ModConfig.INSTANCE.isShowLatencyMetrics())
                         .setDefaultValue(true)
-                        .setTooltip(Component.literal("在 F3 调试面板中显示 Game、Render、Overlap 与 PC 总延迟"))
+                        .setTooltip(Component.literal("在 F3 调试面板中显示 PC 总延迟、Sleep 时长、对齐误差与各标记区间的实测耗时"))
                         .setSaveConsumer(ModConfig.INSTANCE::setShowLatencyMetrics)
                         .build());
 
@@ -59,19 +50,19 @@ public class ConfigScreen {
                                 Component.literal("启用诊断日志 (Diagnostic Logging)"),
                                 ModConfig.INSTANCE.isEnableDiagnosticLogging())
                         .setDefaultValue(ModConfig.isDevEnvironment())
-                        .setTooltip(Component.literal("每秒聚合输出一次 Reflex Summary 统计日志至游戏控制台（开发环境默认开启，生产环境默认关闭）"))
+                        .setTooltip(Component.literal("每秒向游戏控制台输出 Summary 总览与 Internals 休眠决策全过程; GPU 时间戳就绪后另加 Timestamps 逐标记时刻（开发环境默认开启，生产环境默认关闭）"))
                         .setSaveConsumer(ModConfig.INSTANCE::setEnableDiagnosticLogging)
                         .build());
 
         generalCategory.addEntry(
                 entryBuilder.startDoubleField(
-                                Component.literal("手动等待偏置 (毫秒)"),
-                                ModConfig.INSTANCE.getManualWaitOffsetMs())
+                                Component.literal("手动休眠偏置 (毫秒)"),
+                                ModConfig.INSTANCE.getManualSleepOffsetMs())
                         .setDefaultValue(0.0d)
                         .setMin(-5.0d)
                         .setMax(5.0d)
-                        .setTooltip(Component.literal("为计算出的等待时间增加手动偏置，正数增加等待时间，负数减少等待时间 (单位: ms)"))
-                        .setSaveConsumer(ModConfig.INSTANCE::setManualWaitOffsetMs)
+                        .setTooltip(Component.literal("在算出的休眠时长上叠加手动偏置：正数推迟唤醒，负数提前唤醒（提前量以完全不休眠为下限）"))
+                        .setSaveConsumer(ModConfig.INSTANCE::setManualSleepOffsetMs)
                         .build());
 
         return builder.build();

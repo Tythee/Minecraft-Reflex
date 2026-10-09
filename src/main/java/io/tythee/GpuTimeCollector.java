@@ -24,12 +24,22 @@ import java.util.OptionalLong;
 
 public class GpuTimeCollector {
     public long frameId = 0;
-    public long cpuStartTime;
-    public long renderBuildStartTime;
-    public long renderBuildEndTime;
+    public long sleepReturnTime;
+    /** INPUT_SAMPLE: 输入轮询完成的时刻。26+ 由 pollEvents 之后的注入点写入; pre-26 等于 sleepReturnTime。 */
+    public long inputSampleTime;
+    /** SIMULATION_START: Minecraft.tick() 入口时刻; 该帧未 tick(菜单/加载)时为 0。 */
+    public long simulationStartTime;
+    /** SIMULATION_END: Minecraft.tick() 返回时刻; 该帧未 tick 时为 0。 */
+    public long simulationEndTime;
+    public long renderSubmitStartTime;
     public long renderSubmitEndTime;
-    public long cpuEndTime;
-    public long waitDurationNs;
+    public long presentStartTime;
+    public long presentEndTime;
+    public long sleepDurationNs;
+    /** 本帧等待决策时对"GPU 何时空闲"的预测值(系统时钟), 用于事后核对投影误差; 仅诊断用。 */
+    public Long projectedGpuFinishNs = null;
+    /** 本帧是否真的执行过一次对齐(sleep 拿到过正目标)。false 时 AlignErr 无意义。 */
+    public boolean alignmentPerformed = false;
 
     public Long startTimeSystem = null;
     public Long endTimeSystem = null;
@@ -156,7 +166,7 @@ public class GpuTimeCollector {
                 startTimeGpu = (period == 1.0f) ? rawStart : Math.round(rawStart * (double) period);
                 long offset = getGpuToSystemOffset26(device);
                 if (offset == 0) {
-                    offset = cpuStartTime - startTimeGpu;
+                    offset = sleepReturnTime - startTimeGpu;
                 }
                 this.clockOffset = offset;
                 startTimeSystem = startTimeGpu + offset;
@@ -191,14 +201,19 @@ public class GpuTimeCollector {
         startQueryInserted = false;
         endQueryInserted = false;
         isReady = false;
-        waitDurationNs = 0;
+        sleepDurationNs = 0;
         frameId = 0;
-        cpuStartTime = 0;
-        cpuEndTime = 0;
-        renderBuildStartTime = 0;
-        renderBuildEndTime = 0;
+        sleepReturnTime = 0;
+        presentEndTime = 0;
+        inputSampleTime = 0;
+        simulationStartTime = 0;
+        simulationEndTime = 0;
+        renderSubmitStartTime = 0;
         renderSubmitEndTime = 0;
+        presentStartTime = 0;
         clockOffset = 0;
+        projectedGpuFinishNs = null;
+        alignmentPerformed = false;
     }
 }
 //?} else {
@@ -209,12 +224,22 @@ import static com.mojang.blaze3d.opengl.GlConst.GL_TRUE;
 
 public class GpuTimeCollector {
     public long frameId = 0;
-    public long cpuStartTime;
-    public long renderBuildStartTime;
-    public long renderBuildEndTime;
+    public long sleepReturnTime;
+    // INPUT_SAMPLE: 输入轮询完成的时刻。26+ 由 pollEvents 之后的注入点写入; pre-26 等于 sleepReturnTime。
+    public long inputSampleTime;
+    // SIMULATION_START: Minecraft.tick() 入口时刻; 该帧未 tick(菜单/加载)时为 0。
+    public long simulationStartTime;
+    // SIMULATION_END: Minecraft.tick() 返回时刻; 该帧未 tick 时为 0。
+    public long simulationEndTime;
+    public long renderSubmitStartTime;
     public long renderSubmitEndTime;
-    public long cpuEndTime;
-    public long waitDurationNs;
+    public long presentStartTime;
+    public long presentEndTime;
+    public long sleepDurationNs;
+    // 本帧等待决策时对"GPU 何时空闲"的预测值(系统时钟), 用于事后核对投影误差; 仅诊断用。
+    public Long projectedGpuFinishNs = null;
+    // 本帧是否真的执行过一次对齐(sleep 拿到过正目标)。false 时 AlignErr 无意义。
+    public boolean alignmentPerformed = false;
 
     public Long startTimeSystem = null;
     public Long endTimeSystem = null;
@@ -319,14 +344,19 @@ public class GpuTimeCollector {
         startQueryInserted = false;
         endQueryInserted = false;
         isReady = false;
-        waitDurationNs = 0;
+        sleepDurationNs = 0;
         frameId = 0;
-        cpuStartTime = 0;
-        cpuEndTime = 0;
-        renderBuildStartTime = 0;
-        renderBuildEndTime = 0;
+        sleepReturnTime = 0;
+        presentEndTime = 0;
+        inputSampleTime = 0;
+        simulationStartTime = 0;
+        simulationEndTime = 0;
+        renderSubmitStartTime = 0;
         renderSubmitEndTime = 0;
+        presentStartTime = 0;
         clockOffset = 0;
+        projectedGpuFinishNs = null;
+        alignmentPerformed = false;
     }
 }
 *///?}

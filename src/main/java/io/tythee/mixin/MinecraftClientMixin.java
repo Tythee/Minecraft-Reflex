@@ -32,11 +32,39 @@ public abstract class MinecraftClientMixin {
             at = @At(value = "INVOKE", target = FRAME_START_TARGET)
     )
     private void onFrameStart(CallbackInfo ci) {
-        long waitNs = ReflexClient.getScheduler().Wait();
+        long sleepNs = ReflexClient.getScheduler().sleep();
         //? if lt_26 {
         /*org.lwjgl.glfw.GLFW.glfwPollEvents();*///?}
-        long cpuStartTime = System.nanoTime();
-        ReflexClient.getScheduler().startFrame(cpuStartTime, waitNs);
+        long sleepReturnTime = System.nanoTime();
+        ReflexClient.getScheduler().startFrame(sleepReturnTime, sleepNs);
+    }
+
+    // INPUT_SAMPLE: 26+ 的 FRAME_START_TARGET 就是 pollEvents, AFTER 即输入轮询完成时刻。
+    // pre-26 的 FRAME_START_TARGET 是 runTick 调用点, AFTER 会落到整帧末尾, 故排除 ——
+    // 那边 onFrameStart 已自行 glfwPollEvents() 后取 sleepReturnTime 充当采样点。
+    //? if !lt_26 {
+    @Inject(
+            method = "run",
+            at = @At(value = "INVOKE", target = FRAME_START_TARGET, shift = At.Shift.AFTER)
+    )
+    private void afterInputPoll(CallbackInfo ci) {
+        ReflexClient.getScheduler().afterInputPoll(System.nanoTime());
+    }
+    //?}
+
+    // SIMULATION_START: Minecraft#tick() 是四个版本组一致的模拟入口(1.21.11/26.1.2/26.2/26.3
+    // 均有 tick()V, 且 runTick 内每帧仅调用一次)。26+ 的 tick() 在 runTick 里而渲染在 renderFrame 里,
+    // 所以不能拿 renderFrame 的 HEAD 当模拟起点 —— 那时模拟已经结束了。
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void onSimulationStart(CallbackInfo ci) {
+        ReflexClient.getScheduler().beforeSimulation();
+    }
+
+    // SIMULATION_END: 用 RETURN 而非 TAIL —— 四个版本组的 tick() 实测都只有 1 个 return
+    // 指令, 两者等价; 但若未来版本加入早退分支, RETURN 仍能覆盖所有出口而 TAIL 会静默漏打。
+    @Inject(method = "tick", at = @At("RETURN"))
+    private void onSimulationEnd(CallbackInfo ci) {
+        ReflexClient.getScheduler().afterSimulation();
     }
 
     @Inject(
@@ -46,8 +74,8 @@ public abstract class MinecraftClientMixin {
                     target = GAME_RENDERER_RENDER
             )
     )
-    private void beforeRenderBuild(CallbackInfo ci) {
-        ReflexClient.getScheduler().beforeRenderBuild();
+    private void beforeRenderSubmit(CallbackInfo ci) {
+        ReflexClient.getScheduler().beforeRenderSubmit();
     }
 
     @Inject(
@@ -58,8 +86,8 @@ public abstract class MinecraftClientMixin {
                     shift = At.Shift.AFTER
             )
     )
-    private void afterRenderBuild(CallbackInfo ci) {
-        ReflexClient.getScheduler().afterRenderBuild();
+    private void afterRenderSubmit(CallbackInfo ci) {
+        ReflexClient.getScheduler().afterRenderSubmit();
     }
 
     @Inject(
@@ -75,7 +103,7 @@ public abstract class MinecraftClientMixin {
             at = @At(value = "INVOKE", target = FLIP_FRAME_TARGET, shift = At.Shift.AFTER)
     )
     private void afterPresent(CallbackInfo ci) {
-        long cpuEndTime = System.nanoTime();
-        ReflexClient.getScheduler().endFrame(cpuEndTime);
+        long presentEndTime = System.nanoTime();
+        ReflexClient.getScheduler().endFrame(presentEndTime);
     }
 }
