@@ -41,6 +41,10 @@ replay_*.log
 *.jfr
 .gradle_home/
 
+# python
+
+__pycache__/
+
 # 无头仿真(tools/run-sim.sh)的运行产物
 
 .sim_out/
