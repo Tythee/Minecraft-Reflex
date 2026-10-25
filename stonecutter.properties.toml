@@ -180,6 +180,16 @@ deps.forge = "11.15.1.2318-1.8.9"
 deps.mcp = "22-1.8.9"
 
 
+# 代表 1.7.10 (最老的一代: 帧循环在 Minecraft#run() 里, F3 也不是 GuiOverlayDebug)
+["1.7.10"]
+mod.mc_releases = ["1.7.10"]
+
+[forge."1.7.10"]
+mod.mc_compat = "[1.7.10,1.7.10]"
+deps.forge = "10.13.4.1614-1.7.10"
+deps.mcp = "12-1.7.10"
+
+
 ["26.1.2"]
 mod.mc_releases = ["26.1", "26.1.1", "26.1.2"]
 
