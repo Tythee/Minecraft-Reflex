@@ -58,10 +58,12 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew buildAll --no-daemon --console=plain
 
-      # 1.12.2(Forge) 走独立子构建: Unimined 与 Loom 的 tiny-remapper 版本互斥, 不能共处一个插件类路径。
-      # 它消费上一步生成的 Stonecutter 产物, 并把 jar 复制进 build/libs/<version>/。
-      - name: Build 1.12.2 Forge (legacy sub-build)
-        run: ./gradlew -p legacy-forge buildAndCollect --no-daemon --console=plain
+      # 1.12.2 / 1.10.2(Forge) 走独立子构建: Unimined 与 Loom 的 tiny-remapper 版本互斥,
+      # 不能共处一个插件类路径。它们消费上一步生成的 Stonecutter 产物, 并把 jar 复制进 build/libs/<version>/。
+      - name: Build legacy Forge targets (legacy sub-build)
+        run: |
+          ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.12.2" --no-daemon --console=plain
+          ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.10.2" --no-daemon --console=plain
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -272,6 +274,14 @@ jobs:
               1.12
               1.12.1
               1.12.2
+          - loader: "forge"
+            loader_name: "Forge"
+            target: "1.10.2"
+            display_version: "1.10 - 1.10.2"
+            game_versions: |
+              1.10
+              1.10.1
+              1.10.2
 
     steps:
       - name: Checkout Code

@@ -4,7 +4,7 @@
     "name": "${name}",
     "description": "Implements NVIDIA Reflex style frame pacing in Minecraft to reduce render queue latency.",
     "version": "${version}",
-    "mcversion": "1.12.2",
+    "mcversion": "${mcversion}",
     "authorList": [ "Tythee" ],
     "credits": "OrzMiku",
     "logoFile": "assets/reflex/icon.png",

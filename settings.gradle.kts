@@ -59,6 +59,7 @@ stonecutter {
         // 1.13.2 及更早只有 Forge(MCP 映射)。这个节点只生成源码, 编译/打包在 legacy-forge 子构建里
         // (Unimined 与 Loom 的 tiny-remapper 版本互斥, 不能共处一个插件类路径)。
         match("1.12.2", "forge")
+        match("1.10.2", "forge")
         vcsVersion = "26.1.2-fabric"
     }
 }

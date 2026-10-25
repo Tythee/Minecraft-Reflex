@@ -7,22 +7,47 @@ plugins {
 
 group = "io.tythee"
 
-/** 版本号仍然只在主构建的 stonecutter.properties.toml 里维护, 这里读出来用。 */
-val modVersion: String = rootProject.file("../stonecutter.properties.toml")
-    .readLines()
+/** 目标 MC 版本: ./gradlew -p legacy-forge buildAndCollect -Pmc=1.10.2 */
+val mc: String = (findProperty("mc") as String?) ?: "1.12.2"
+
+/** 版本号与 Forge/MCP 版本仍然只在主构建的 stonecutter.properties.toml 里维护, 这里读出来用。 */
+val tomlLines: List<String> = rootProject.file("../stonecutter.properties.toml").readLines()
+
+fun tomlValue(section: String, key: String): String? {
+    var inSection = false
+    for (line in tomlLines) {
+        val t = line.trim()
+        if (t.startsWith("[") && t.endsWith("]")) {
+            inSection = (t == "[$section]")
+            continue
+        }
+        if (inSection && t.startsWith("$key =")) {
+            return t.substringAfter('=').trim().trim('"')
+        }
+    }
+    return null
+}
+
+val modVersion: String = tomlLines
     .first { it.trimStart().startsWith("mod.version") }
     .substringAfter('"')
     .substringBefore('"')
 
-/** 由主构建的 :1.12.2-forge:stonecutterGenerate 产出(条件块已按 1.12.2 解析完毕)。 */
-val generatedMain = rootProject.file("../versions/1.12.2-forge/build/generated/stonecutter/main")
+val forgeVersion: String = tomlValue("forge.\"$mc\"", "deps.forge")
+    ?: error("stonecutter.properties.toml 里缺少 [forge.\"$mc\"] deps.forge")
+
+val mcpChannel: String = tomlValue("forge.\"$mc\"", "deps.mcp")
+    ?: error("stonecutter.properties.toml 里缺少 [forge.\"$mc\"] deps.mcp")
+
+/** 由主构建的 :<mc>-forge:stonecutterGenerate 产出(条件块已按该版本解析完毕)。 */
+val generatedMain = rootProject.file("../versions/$mc-forge/build/generated/stonecutter/main")
 
 require(generatedMain.isDirectory) {
-    "缺少 1.12.2 的 Stonecutter 产物: $generatedMain\n" +
-        "请先运行主构建的 ./gradlew :1.12.2-forge:stonecutterGenerate (或 buildAll)。"
+    "缺少 $mc 的 Stonecutter 产物: $generatedMain\n" +
+        "请先运行主构建的 ./gradlew :$mc-forge:stonecutterGenerate (或 buildAll)。"
 }
 
-version = "$modVersion+1.12.2"
+version = "$modVersion+$mc"
 base.archivesName = "reflex-forge"
 
 repositories {
@@ -33,23 +58,23 @@ repositories {
 }
 
 unimined.minecraft {
-    version("1.12.2")
+    version(mc)
 
-    // 1.12.2 没有 Mojang 官方映射(1.14.4 才有), 走 MCP: searge 名 + mcp 名两层
+    // 这些版本没有 Mojang 官方映射(1.14.4 才有), 走 MCP: searge 名 + mcp 名两层
     mappings {
         searge()
-        mcp("stable", "39-1.12")
+        mcp("stable", mcpChannel)
     }
 
     minecraftForge {
-        loader("14.23.5.2860")
+        loader(forgeVersion)
         // Unimined 会接上 Mixin 库/注解处理器并把 MixinConfigs 写进 manifest
         mixinConfig("reflex.mixins.json")
     }
 }
 
 dependencies {
-    // 1.12.2 的 Forge 不自带 Mixin; 生产环境还需要 MixinBootstrap 引导(见 mcmod.info 声明)
+    // 这些老 Forge 不自带 Mixin; 生产环境还需要 MixinBootstrap 引导(见 mcmod.info 声明)
     implementation("org.spongepowered:mixin:0.8.5") { isTransitive = false }
 }
 
@@ -61,7 +86,7 @@ sourceSets {
         )
         resources.srcDirs(generatedMain.resolve("resources"))
 
-        // 1.14+ 的两份 mixin 实现与 Cloth Config 配置界面在 1.12.2 上不成立,
+        // 1.14+ 的两份 mixin 实现与 Cloth Config 配置界面在这些版本上不成立,
         // 分别由 src/legacy 的 *Legacy 实现与 config/reflex.json 取代。
         java.exclude("io/tythee/mixin/MinecraftClientMixin.java")
         java.exclude("io/tythee/mixin/DebugOverlayMixin.java")
@@ -88,10 +113,11 @@ tasks {
             "id" to "reflex",
             "name" to "Reflex AntiLag",
             "version" to modVersion,
-            "minecraft" to "[1.12,1.12.2]"
+            "mcversion" to mc
         )
 
         inputs.property("version", modVersion)
+        inputs.property("mc", mc)
 
         filesMatching("mcmod.info") { expand(props) }
         filesMatching("*.mixins.json") {
@@ -109,13 +135,14 @@ tasks {
 
     register<Copy>("buildAndCollect") {
         group = "build"
-        description = "构建 1.12.2 Forge jar, 并复制到主构建的 build/libs/<mod version>/"
+        description = "构建 <mc> Forge jar, 并复制到主构建的 build/libs/<mod version>/"
 
         dependsOn("build")
         inputs.property("version", modVersion)
+        inputs.property("mc", mc)
         // Unimined 产物: <name>-<version>-dev.jar(开发名空间) 与 <name>-<version>.jar(已 remap 到 SRG)
         from(layout.buildDirectory.dir("libs")) {
-            include("reflex-forge-*.jar")
+            include("reflex-forge-*+$mc.jar")
             exclude("*-dev.jar", "*-sources.jar")
         }
         into(rootProject.file("../build/libs/$modVersion"))
