@@ -64,6 +64,7 @@ jobs:
         run: |
           ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.12.2" --no-daemon --console=plain
           ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.10.2" --no-daemon --console=plain
+          ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.8.9" --no-daemon --console=plain
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -282,6 +283,21 @@ jobs:
               1.10
               1.10.1
               1.10.2
+          - loader: "forge"
+            loader_name: "Forge"
+            target: "1.8.9"
+            display_version: "1.8 - 1.8.9"
+            game_versions: |
+              1.8
+              1.8.1
+              1.8.2
+              1.8.3
+              1.8.4
+              1.8.5
+              1.8.6
+              1.8.7
+              1.8.8
+              1.8.9
 
     steps:
       - name: Checkout Code

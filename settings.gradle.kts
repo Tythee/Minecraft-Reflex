@@ -60,6 +60,7 @@ stonecutter {
         // (Unimined 与 Loom 的 tiny-remapper 版本互斥, 不能共处一个插件类路径)。
         match("1.12.2", "forge")
         match("1.10.2", "forge")
+        match("1.8.9", "forge")
         vcsVersion = "26.1.2-fabric"
     }
 }
