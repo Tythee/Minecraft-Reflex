@@ -66,6 +66,8 @@ jobs:
           ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.10.2" --no-daemon --console=plain
           ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.8.9" --no-daemon --console=plain
           ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.7.10" --no-daemon --console=plain
+          ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.9.4" --no-daemon --console=plain
+          ./gradlew -p legacy-forge buildAndCollect "-Pmc=1.11.2" --no-daemon --console=plain
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -305,6 +307,24 @@ jobs:
             display_version: "1.7.10"
             game_versions: |
               1.7.10
+          - loader: "forge"
+            loader_name: "Forge"
+            target: "1.9.4"
+            display_version: "1.9 - 1.9.4"
+            game_versions: |
+              1.9
+              1.9.1
+              1.9.2
+              1.9.3
+              1.9.4
+          - loader: "forge"
+            loader_name: "Forge"
+            target: "1.11.2"
+            display_version: "1.11 - 1.11.2"
+            game_versions: |
+              1.11
+              1.11.1
+              1.11.2
 
     steps:
       - name: Checkout Code

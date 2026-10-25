@@ -63,6 +63,8 @@ stonecutter {
         match("1.8.9", "forge")
         // 1.7.10 有独立的入口(cpw.mods.fml.*)与 mixin 实现(呈递点、渲染点形参都不同)
         match("1.7.10", "forge")
+        match("1.9.4", "forge")
+        match("1.11.2", "forge")
         vcsVersion = "26.1.2-fabric"
     }
 }
