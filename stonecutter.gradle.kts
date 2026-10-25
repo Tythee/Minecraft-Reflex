@@ -27,6 +27,12 @@ stonecutter parameters {
         // 1.20 起 DebugScreenOverlay#renderLines 收 GuiGraphics (此前是 PoseStack),
         // 且 1.17~1.19 只有 getSystemInformation()/drawSystemInformation() 这一对。
         put("gte_1_20", current.parsed >= "1.20")
+        // 1.17 起 Minecraft 才自带 slf4j (更早的版本打日志走 log4j2)
+        put("gte_1_17", current.parsed >= "1.17")
+        // 1.16 起 Cloth Config(4.x) 的标题/提示载体从 String 换成 Component
+        put("gte_1_16", current.parsed >= "1.16")
+        // 1.15 起 Minecraft 才有 getWindow()
+        put("gte_1_15", current.parsed >= "1.15")
         // 1.19 起才有 Component.literal (更早是 TextComponent)
         put("lt_1_19", current.parsed < "1.19")
     }
@@ -47,13 +53,15 @@ stonecutter parameters {
 
     // The frame-present call site keeps getting renamed by Mojang release to release:
     // (verified by disassembling Minecraft#runTick/renderFrame on each target version):
-    //   <1.21.2 Window#updateDisplay()                      (1.20.6 与 1.21.1 实测如此)
+    //   <1.15   Window#updateDisplay(boolean)                (1.14.4 的 Window 只有这一个重载)
+    //   1.15~1.21.1 Window#updateDisplay()
     //   1.21.2+ Window#updateDisplay(TracyFrameCapture)     (TracyFrameCapture 形参自 1.21.2 出现)
     //   26.1.x  RenderSystem#flipFrame(TracyFrameCapture)
     //   26.2    GpuSurface#present() (Blaze3D)
     //   26.3+   GpuSurface#present() (RenderPearl)
     swaps["flip_frame_target"] = "\"${
         when {
+            current.parsed < "1.15" -> "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Z)V"
             current.parsed < "1.21.2" -> "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V"
             current.parsed < "26" -> "Lcom/mojang/blaze3d/platform/Window;updateDisplay(Lcom/mojang/blaze3d/TracyFrameCapture;)V"
             current.parsed < "26.2" -> "Lcom/mojang/blaze3d/systems/RenderSystem;flipFrame(Lcom/mojang/blaze3d/TracyFrameCapture;)V"

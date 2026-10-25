@@ -50,6 +50,10 @@ stonecutter {
         match("1.19.4", "fabric")
         match("1.18.2", "fabric")
         match("1.17.1", "fabric")
+        // 1.16.5 及更早: 无 NeoForge, 且客户端跑在 Java 8 上
+        match("1.16.5", "fabric")
+        match("1.15.2", "fabric")
+        match("1.14.4", "fabric")
         vcsVersion = "26.1.2-fabric"
     }
 }

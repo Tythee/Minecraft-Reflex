@@ -21,9 +21,7 @@
 		"client": [
 			"io.tythee.fabric.ReflexClientFabric"
 		],
-		"modmenu": [
-			"io.tythee.fabric.config.ModMenuIntegration"
-		]
+		"modmenu": ${modmenu_entrypoint}
 	},
 	"mixins": [
 		"reflex.mixins.json"

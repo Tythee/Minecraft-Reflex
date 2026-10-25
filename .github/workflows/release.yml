@@ -227,6 +227,37 @@ jobs:
             game_versions: |
               1.17
               1.17.1
+          # 1.16.5 及更早: 只有 fabric, 且客户端跑在 Java 8 上
+          # (1.14.4 那一版没有 ModMenu 集成: 当年的坐标 io.github.prospector 已不可达, 配置改 config/reflex.json)
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.16.5"
+            display_version: "1.16 - 1.16.5"
+            game_versions: |
+              1.16
+              1.16.1
+              1.16.2
+              1.16.3
+              1.16.4
+              1.16.5
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.15.2"
+            display_version: "1.15 - 1.15.2"
+            game_versions: |
+              1.15
+              1.15.1
+              1.15.2
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.14.4"
+            display_version: "1.14 - 1.14.4"
+            game_versions: |
+              1.14
+              1.14.1
+              1.14.2
+              1.14.3
+              1.14.4
 
     steps:
       - name: Checkout Code

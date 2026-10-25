@@ -168,6 +168,10 @@ public class ReflexScheduler {
      * 窗口大小直接决定 GPU 负载, 是判读 est.gpu 是否合理的前提, 因此打进诊断行。
      */
     private static String frameBufferSize() {
+        //? if !gte_1_15 {
+        /*// 1.14.x 的 Minecraft 只有私有的 window 字段, 没有 getWindow(); 这只是诊断行, 直接标 n/a。
+        return "n/a";
+        *///?} else {
         try {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc == null) return "n/a";
@@ -177,6 +181,7 @@ public class ReflexScheduler {
         } catch (Throwable t) {
             return "n/a";
         }
+        //?}
     }
 
     /**
@@ -535,7 +540,12 @@ public class ReflexScheduler {
             if (sleepTime <= spinThresholdNs) {
                 long targetTime = System.nanoTime() + sleepTime;
                 while (System.nanoTime() < targetTime) {
+                    //? if gte_1_17 {
                     Thread.onSpinWait();
+                    //?} else {
+                    /*// Java 8(1.16.5 及更早)没有 onSpinWait: 退化为纯自旋。
+                    // 本循环只覆盖最后几百微秒, 不引入额外调度开销反而更准。
+                    *///?}
                 }
                 break;
             }

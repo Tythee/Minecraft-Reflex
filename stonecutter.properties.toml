@@ -115,6 +115,41 @@ deps.cloth_config = "5.3.63"
 deps.modmenu = "2.0.17"
 
 
+# 代表 1.16 ~ 1.16.5 (Cloth Config 4.x, 标题/提示收 Component; 客户端 Java 8)
+["1.16.5"]
+mod.mc_releases = ["1.16", "1.16.1", "1.16.2", "1.16.3", "1.16.4", "1.16.5"]
+
+[fabric."1.16.5"]
+mod.mc_compat = ">=1.16 <=1.16.5"
+deps.fabric_api = "0.42.0+1.16"
+deps.cloth_config = "4.17.101"
+deps.modmenu = "1.16.23"
+
+
+# 代表 1.15 ~ 1.15.2 (Cloth Config 2.x = maven 坐标 config-2, 标题/提示仍是 String)
+["1.15.2"]
+mod.mc_releases = ["1.15", "1.15.1", "1.15.2"]
+
+[fabric."1.15.2"]
+mod.mc_compat = ">=1.15 <=1.15.2"
+deps.fabric_api = "0.28.5+1.15"
+deps.cloth_config = "2.14.2"
+deps.cloth_config_artifact = "config-2"
+deps.modmenu = "1.10.7"
+
+
+# 代表 1.14 ~ 1.14.4 (同上; 且 Minecraft 还没有 getWindow())
+["1.14.4"]
+mod.mc_releases = ["1.14", "1.14.1", "1.14.2", "1.14.3", "1.14.4"]
+
+[fabric."1.14.4"]
+mod.mc_compat = ">=1.14 <=1.14.4"
+deps.fabric_api = "0.28.5+1.14"
+deps.cloth_config = "1.8"
+deps.cloth_config_artifact = "config-2"
+# 无 deps.modmenu: 1.14 的 ModMenu 坐标(io.github.prospector)已不在可达的 maven 上
+
+
 ["26.1.2"]
 mod.mc_releases = ["26.1", "26.1.1", "26.1.2"]
 
