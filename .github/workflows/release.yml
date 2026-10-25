@@ -270,6 +270,9 @@ jobs:
               1.14.3
               1.14.4
           # 1.12.2 及更早: 只有 Forge(MCP 映射, 构建走 legacy-forge 子构建)
+          # 说明: 1.13.x 有意缺席 —— 它没有 Fabric; Forge 1.13.x 不自带 Mixin 且 MixinBootstrap 明确
+          # 不支持 1.13.x(ModLauncher 版本原因); 唯一可行路线是 Rift, 但 CurseForge 不认 rift loader,
+          # 只能上 Modrinth, 收益与代价不成比。需要时可单独补。
           - loader: "forge"
             loader_name: "Forge"
             target: "1.12.2"
