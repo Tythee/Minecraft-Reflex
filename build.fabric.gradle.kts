@@ -124,7 +124,15 @@ tasks {
         }
 
         val mixinJava = "JAVA_${requiredJava.majorVersion}"
-        filesMatching("*.mixins.json") { expand("java" to mixinJava) }
+        // 1.12.2 用另一套注入实现(Legacy 后缀), 由各 loaders 的构建脚本给出对应清单
+        filesMatching("*.mixins.json") {
+            expand(
+                mapOf(
+                    "java" to mixinJava,
+                    "mixins_client" to """["MinecraftClientMixin","DebugOverlayMixin"]"""
+                )
+            )
+        }
 
         exclude("META-INF/neoforge.mods.toml")
     }

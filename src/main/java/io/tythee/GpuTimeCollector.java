@@ -216,7 +216,7 @@ public class GpuTimeCollector {
         alignmentPerformed = false;
     }
 }
-//?} else {
+//?} elif gte_1_13 {
 /*import org.lwjgl.opengl.GL32C;
 import org.lwjgl.opengl.GL33C;
 
@@ -338,6 +338,201 @@ public class GpuTimeCollector {
         if (endTimeQuery != null) {
             GL32C.glDeleteQueries(endTimeQuery);
             endTimeQuery = null;
+        }
+        startTimeSystem = null;
+        endTimeSystem = null;
+        startTimeGpu = null;
+        endTimeGpu = null;
+        startQueryInserted = false;
+        endQueryInserted = false;
+        isReady = false;
+        sleepDurationNs = 0;
+        frameId = 0;
+        sleepReturnTime = 0;
+        presentEndTime = 0;
+        inputSampleTime = 0;
+        simulationStartTime = 0;
+        simulationEndTime = 0;
+        renderSubmitStartTime = 0;
+        renderSubmitEndTime = 0;
+        presentStartTime = 0;
+        clockOffset = 0;
+        projectedGpuFinishNs = null;
+        alignmentPerformed = false;
+    }
+}
+*///?} else {
+/*// ===== 1.13 之前(1.12.2 及更早): Forge + MCP 映射 + LWJGL2, 硬件计时走 ARB_timer_query =====
+// 与上面 LWJGL3 分支同构, 只换 API; 对外字段与方法名保持一致,
+// 因此 ReflexScheduler / ReflexMetrics 一行都不用改。
+import org.lwjgl.opengl.ARBTimerQuery;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GLContext;
+
+public class GpuTimeCollector {
+    public long frameId = 0;
+    public long sleepReturnTime;
+    public long inputSampleTime;
+    public long simulationStartTime;
+    public long simulationEndTime;
+    public long renderSubmitStartTime;
+    public long renderSubmitEndTime;
+    public long presentStartTime;
+    public long presentEndTime;
+    public long sleepDurationNs;
+    public Long projectedGpuFinishNs = null;
+    public boolean alignmentPerformed = false;
+
+    public Long startTimeSystem = null;
+    public Long endTimeSystem = null;
+    public long clockOffset = 0;
+    public Long startTimeGpu = null;
+    public Long endTimeGpu = null;
+
+    public Integer startTimeQuery = null;
+    public Integer endTimeQuery = null;
+
+    public boolean startQueryInserted = false;
+    public boolean endQueryInserted = false;
+    public boolean isReady = false;
+
+    private static Boolean supported = null;
+    private static long cachedOffset = 0;
+    private static long lastCalibrateNs = 0;
+    private static int clockQuery = -1;
+    private static boolean loggedWarn = false;
+
+    public static boolean isSupported() {
+        if (supported == null) {
+            boolean ok;
+            try {
+                ok = GLContext.getCapabilities().GL_ARB_timer_query;
+            } catch (Throwable t) {
+                ok = false;
+            }
+            supported = ok;
+            if (ok) {
+                LOGGER.info("[Reflex] Initialized on MC {} | GPU 时间戳: ARB_timer_query (LWJGL2) | TimerPool: OK",
+                        ReflexClient.MINECRAFT);
+            } else if (!loggedWarn) {
+                loggedWarn = true;
+                LOGGER.warn("[Reflex] MC {} | 驱动/上下文不支持 ARB_timer_query, GPU 指标关闭(调度不受影响)",
+                        ReflexClient.MINECRAFT);
+            }
+        }
+        return supported;
+    }
+
+    // GPU 时钟与 System.nanoTime 的偏移, 每秒重标一次。
+    public static long getGpuToSystemOffset() {
+        long now = System.nanoTime();
+        if (now - lastCalibrateNs >= 1_000_000_000L || lastCalibrateNs == 0) {
+            if (!isSupported()) {
+                return 0;
+            }
+            try {
+                if (clockQuery == -1) {
+                    clockQuery = GL15.glGenQueries();
+                }
+                ARBTimerQuery.glQueryCounter(clockQuery, ARBTimerQuery.GL_TIMESTAMP);
+                // GL_QUERY_RESULT 会阻塞到结果就绪, 读回来就是"此刻"的 GPU 时钟
+                long gpuNs = ARBTimerQuery.glGetQueryObjecti64(clockQuery, GL15.GL_QUERY_RESULT);
+                cachedOffset = System.nanoTime() - gpuNs;
+                lastCalibrateNs = now;
+            } catch (Throwable t) {
+                supported = false;
+                return 0;
+            }
+        }
+        return cachedOffset;
+    }
+
+    public GpuTimeCollector() {
+    }
+
+    public void startQueryInsert() {
+        if (!isSupported()) {
+            return;
+        }
+        try {
+            startTimeQuery = GL15.glGenQueries();
+            ARBTimerQuery.glQueryCounter(startTimeQuery, ARBTimerQuery.GL_TIMESTAMP);
+            startQueryInserted = true;
+        } catch (Throwable t) {
+            supported = false;
+        }
+    }
+
+    public void endQueryInsert() {
+        if (!startQueryInserted || !isSupported()) {
+            return;
+        }
+        try {
+            endTimeQuery = GL15.glGenQueries();
+            ARBTimerQuery.glQueryCounter(endTimeQuery, ARBTimerQuery.GL_TIMESTAMP);
+            endQueryInserted = true;
+        } catch (Throwable t) {
+            supported = false;
+        }
+    }
+
+    public boolean checkQuery() {
+        if (!startQueryInserted || !isSupported()) {
+            return false;
+        }
+        if (isReady) {
+            return true;
+        }
+
+        try {
+            // 1. 先独立取起始时间戳
+            if (startTimeSystem == null && startTimeQuery != null) {
+                if (ARBTimerQuery.glGetQueryObjecti64(startTimeQuery, GL15.GL_QUERY_RESULT_AVAILABLE) != 0) {
+                    startTimeGpu = ARBTimerQuery.glGetQueryObjecti64(startTimeQuery, GL15.GL_QUERY_RESULT);
+                    GL15.glDeleteQueries(startTimeQuery);
+                    startTimeQuery = null;
+
+                    long offset = getGpuToSystemOffset();
+                    this.clockOffset = offset;
+                    startTimeSystem = startTimeGpu + offset;
+                }
+            }
+
+            // 2. 再独立取结束时间戳
+            if (endQueryInserted && endTimeSystem == null && endTimeQuery != null) {
+                if (ARBTimerQuery.glGetQueryObjecti64(endTimeQuery, GL15.GL_QUERY_RESULT_AVAILABLE) != 0) {
+                    endTimeGpu = ARBTimerQuery.glGetQueryObjecti64(endTimeQuery, GL15.GL_QUERY_RESULT);
+                    GL15.glDeleteQueries(endTimeQuery);
+                    endTimeQuery = null;
+
+                    long offset = (this.clockOffset != 0) ? this.clockOffset : getGpuToSystemOffset();
+                    this.clockOffset = offset;
+                    endTimeSystem = endTimeGpu + offset;
+                    if (startTimeSystem == null) {
+                        startTimeSystem = Math.max(0, endTimeSystem - 15_000_000L);
+                    }
+                    isReady = true;
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            supported = false;
+        }
+
+        return isReady;
+    }
+
+    public void reset() {
+        try {
+            if (startTimeQuery != null) {
+                GL15.glDeleteQueries(startTimeQuery);
+                startTimeQuery = null;
+            }
+            if (endTimeQuery != null) {
+                GL15.glDeleteQueries(endTimeQuery);
+                endTimeQuery = null;
+            }
+        } catch (Throwable ignored) {
         }
         startTimeSystem = null;
         endTimeSystem = null;

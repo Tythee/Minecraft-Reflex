@@ -15,7 +15,9 @@ stonecutter parameters {
 
     // Adds constants to Stonecutter comments (i.e. for `//? if fabric {...`)
     constants {
-        match(loader, "fabric", "neoforge")
+        match(loader, "fabric", "neoforge", "forge")
+        // 1.13 起才有 net.minecraft.SharedConstants (dev 环境判定用)
+        put("gte_1_13", current.parsed >= "1.13")
         put("gte_26_3", current.parsed >= "26.3")
         put("gte_26_2", current.parsed >= "26.2")
         put("gte_26_1", current.parsed >= "26.1")

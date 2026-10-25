@@ -155,9 +155,12 @@ public class ModConfig {
     }
 
     public static boolean isDevEnvironment() {        try {
+            //? if gte_1_13 {
             if (net.minecraft.SharedConstants.IS_RUNNING_IN_IDE) {
                 return true;
             }
+            //?}
+            // 1.12.2 没有 SharedConstants, 该版本一律按生产环境处理(诊断日志默认关, 可在配置里打开)
         } catch (Throwable ignored) {
         }
         try {

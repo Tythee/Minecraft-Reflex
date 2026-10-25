@@ -3,10 +3,7 @@
   "package": "io.tythee.mixin",
   "compatibilityLevel": "${java}",
   "minVersion": "0.8",
-  "client": [
-    "MinecraftClientMixin",
-    "DebugOverlayMixin"
-  ],
+  "client": ${mixins_client},
   "mixins": [
   ],
   "injectors": {

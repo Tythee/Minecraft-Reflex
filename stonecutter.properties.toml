@@ -150,6 +150,15 @@ deps.cloth_config_artifact = "config-2"
 # 无 deps.modmenu: 1.14 的 ModMenu 坐标(io.github.prospector)已不在可达的 maven 上
 
 
+# 代表 1.12 ~ 1.12.2 —— 只有 Forge, MCP 映射 + LWJGL2 + Java 8 (由 Unimined 承接)
+["1.12.2"]
+mod.mc_releases = ["1.12", "1.12.1", "1.12.2"]
+
+[forge."1.12.2"]
+mod.mc_compat = "[1.12,1.12.2]"
+deps.forge = "14.23.5.2860"
+
+
 ["26.1.2"]
 mod.mc_releases = ["26.1", "26.1.1", "26.1.2"]
 
