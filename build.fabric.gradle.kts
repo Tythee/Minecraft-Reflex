@@ -85,7 +85,8 @@ tasks {
             register("minecraft", "mod.mc_compat")
         }
 
-        filesMatching("fabric.mod.json") { expand(props) }
+        // Java 需求随版本而变 (1.20.5+ 要 21, 更早要 17)
+        filesMatching("fabric.mod.json") { expand(props + ("java" to ">=${requiredJava.majorVersion}")) }
 
         val mixinJava = "JAVA_${requiredJava.majorVersion}"
         filesMatching("*.mixins.json") { expand("java" to mixinJava) }

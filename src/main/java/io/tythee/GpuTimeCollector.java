@@ -220,7 +220,9 @@ public class GpuTimeCollector {
 /*import org.lwjgl.opengl.GL32C;
 import org.lwjgl.opengl.GL33C;
 
-import static com.mojang.blaze3d.opengl.GlConst.GL_TRUE;
+// GL_TRUE 恒为 1; 用 LWJGL 常量可避开 blaze3d 在 1.21.5 把 GlConst 从
+// com.mojang.blaze3d.platform 搬到 com.mojang.blaze3d.opengl 的包名变化。
+import static org.lwjgl.opengl.GL11.GL_TRUE;
 
 public class GpuTimeCollector {
     public long frameId = 0;

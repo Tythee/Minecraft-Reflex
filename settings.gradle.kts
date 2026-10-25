@@ -37,10 +37,19 @@ stonecutter {
         }
 
         // See https://stonecutter.kikugie.dev/wiki/start/#choosing-minecraft-versions
+        // 一个「兼容组」只建一个代表版本; 组内其它小版本靠 mod.mc_compat 声明覆盖。
         match("1.21.11", "fabric", "neoforge")
+        match("1.21.4", "fabric", "neoforge")
+        match("1.21.1", "fabric", "neoforge")
         match("26.1.2", "fabric", "neoforge")
         match("26.2", "fabric", "neoforge")
         match("26.3", "fabric", "neoforge")
+        // NeoForge 自 1.20.2 才存在, 故 1.20.1 及更早只有 fabric 节点
+        match("1.20.6", "fabric", "neoforge")
+        match("1.20.1", "fabric")
+        match("1.19.4", "fabric")
+        match("1.18.2", "fabric")
+        match("1.17.1", "fabric")
         vcsVersion = "26.1.2-fabric"
     }
 }

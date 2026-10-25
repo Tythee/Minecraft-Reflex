@@ -146,6 +146,87 @@ jobs:
             display_version: "26.3+"
             game_versions: |
               26.3
+          # ==== 向下补齐的兼容组: 一个兼容组只出一个代表版本 ====
+          # 1.21.2 起 Window#updateDisplay 收 TracyFrameCapture 形参, 故 1.21~1.21.1 与 1.21.2~1.21.4 分属两组
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.21.4"
+            display_version: "1.21.2 - 1.21.4"
+            game_versions: |
+              1.21.2
+              1.21.3
+              1.21.4
+          - loader: "neoforge"
+            loader_name: "NeoForge"
+            target: "1.21.4"
+            display_version: "1.21.2 - 1.21.4"
+            game_versions: |
+              1.21.2
+              1.21.3
+              1.21.4
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.21.1"
+            display_version: "1.21 - 1.21.1"
+            game_versions: |
+              1.21
+              1.21.1
+          - loader: "neoforge"
+            loader_name: "NeoForge"
+            target: "1.21.1"
+            display_version: "1.21 - 1.21.1"
+            game_versions: |
+              1.21
+              1.21.1
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.20.6"
+            display_version: "1.20.5 - 1.20.6"
+            game_versions: |
+              1.20.5
+              1.20.6
+          - loader: "neoforge"
+            loader_name: "NeoForge"
+            target: "1.20.6"
+            display_version: "1.20.5 - 1.20.6"
+            game_versions: |
+              1.20.5
+              1.20.6
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.20.1"
+            display_version: "1.20 - 1.20.4"
+            game_versions: |
+              1.20
+              1.20.1
+              1.20.2
+              1.20.3
+              1.20.4
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.19.4"
+            display_version: "1.19 - 1.19.4"
+            game_versions: |
+              1.19
+              1.19.1
+              1.19.2
+              1.19.3
+              1.19.4
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.18.2"
+            display_version: "1.18 - 1.18.2"
+            game_versions: |
+              1.18
+              1.18.1
+              1.18.2
+          - loader: "fabric"
+            loader_name: "Fabric"
+            target: "1.17.1"
+            display_version: "1.17 - 1.17.1"
+            game_versions: |
+              1.17
+              1.17.1
 
     steps:
       - name: Checkout Code
@@ -157,7 +238,32 @@ jobs:
           name: reflex-jars
           path: build/libs/${{ needs.build.outputs.version }}
 
+      # 「之前已经发过了的版本不要重复发布」: 同一个 version_number 若在 Modrinth 上已存在,
+      # 本条目整条跳过(CurseForge 一并跳过, 免得两边留下内容相同的重复条目)。
+      # 接口异常时保守放行 —— 宁可让 mc-publish 去报重复, 也不要静默漏发。
+      - name: Skip when this exact version already exists
+        id: dup
+        env:
+          MODRINTH_ID: ${{ vars.MODRINTH_PROJECT_ID || secrets.MODRINTH_PROJECT_ID }}
+          VERSION_NUMBER: "${{ needs.build.outputs.version }}+${{ matrix.loader }}-${{ matrix.target }}"
+        run: |
+          if [ -z "${MODRINTH_ID}" ]; then
+            echo "未配置 Modrinth 项目 ID, 不做重复检查"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          body=$(curl -sS --max-time 30 -H 'User-Agent: reflex-release-ci' \
+            "https://api.modrinth.com/v2/project/${MODRINTH_ID}/version" || echo '')
+          if printf '%s' "$body" | grep -qF "\"version_number\":\"${VERSION_NUMBER}\""; then
+            echo "${VERSION_NUMBER} 已发布过, 跳过"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "${VERSION_NUMBER} 未发布过, 继续"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to Modrinth & CurseForge
+        if: steps.dup.outputs.skip != 'true'
         uses: Kir-Antipov/mc-publish@v3.3
         with:
           # Modrinth (Project ID / Slug & Token)

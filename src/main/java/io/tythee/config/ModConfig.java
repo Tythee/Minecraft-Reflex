@@ -116,7 +116,9 @@ public class ModConfig {
                     // 老配置里的偏移量会被静默当作 0, 表现为"升级后手动偏移丢失"。
                     if (config.manualSleepOffsetMs == 0.0) {
                         try {
-                            com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+                            // 用已建好的 Gson 实例反序列化, 而不是 JsonParser.parseString ——
+                            // 后者是 Gson 2.8.6+ 才有的静态方法, 1.17.x 自带的 Gson 2.8.0 上没有。
+                            com.google.gson.JsonObject obj = gson.fromJson(json, com.google.gson.JsonObject.class);
                             if (!obj.has("manualSleepOffsetMs")) {
                                 if (obj.has("manualWaitOffsetMs")) {
                                     config.manualSleepOffsetMs = obj.get("manualWaitOffsetMs").getAsDouble();

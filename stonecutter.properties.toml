@@ -23,6 +23,98 @@ deps.neo_loader = "21.11.44"
 deps.cloth_config = "21.11.153"
 
 
+# 代表 1.21.2 ~ 1.21.4 (Window#updateDisplay 从这一组起收 TracyFrameCapture 形参)
+["1.21.4"]
+mod.mc_releases = ["1.21.2", "1.21.3", "1.21.4"]
+
+[fabric."1.21.4"]
+mod.mc_compat = ">=1.21.2 <=1.21.4"
+deps.fabric_api = "0.119.4+1.21.4"
+deps.cloth_config = "17.0.144"
+deps.modmenu = "13.0.4"
+
+[neoforge."1.21.4"]
+mod.mc_compat = "[1.21.2, 1.21.4]"
+deps.neo_loader = "21.4.161"
+deps.cloth_config = "17.0.144"
+
+
+# 代表 1.21 ~ 1.21.1 (GameRenderer#render 已是 DeltaTracker, 但 present 仍是 Window#updateDisplay())
+["1.21.1"]
+mod.mc_releases = ["1.21", "1.21.1"]
+
+[fabric."1.21.1"]
+mod.mc_compat = ">=1.21 <=1.21.1"
+deps.fabric_api = "0.116.17+1.21.1"
+deps.cloth_config = "15.0.140"
+deps.modmenu = "11.0.5"
+
+[neoforge."1.21.1"]
+mod.mc_compat = "[1.21, 1.21.1]"
+deps.neo_loader = "21.1.264"
+deps.cloth_config = "15.0.140"
+
+
+# 代表 1.20.5 ~ 1.20.6 (DeltaTracker / TracyFrameCapture 分界线之后)
+["1.20.6"]
+mod.mc_releases = ["1.20.5", "1.20.6"]
+
+[fabric."1.20.6"]
+mod.mc_compat = ">=1.20.5 <=1.20.6"
+deps.fabric_api = "0.100.8+1.20.6"
+deps.cloth_config = "14.0.139"
+deps.modmenu = "10.0.0"
+
+[neoforge."1.20.6"]
+mod.mc_compat = "[1.20.5, 1.20.6]"
+deps.neo_loader = "20.6.144"
+deps.cloth_config = "14.0.139"
+
+
+# 代表 1.20 ~ 1.20.4 (pre-DeltaTracker; NeoForge 尚不存在, 只有 fabric)
+["1.20.1"]
+mod.mc_releases = ["1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4"]
+
+[fabric."1.20.1"]
+mod.mc_compat = ">=1.20 <=1.20.4"
+deps.fabric_api = "0.92.12+1.20.1"
+deps.cloth_config = "11.1.136"
+deps.modmenu = "7.2.2"
+
+
+# 代表 1.19 ~ 1.19.4
+["1.19.4"]
+mod.mc_releases = ["1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4"]
+
+[fabric."1.19.4"]
+mod.mc_compat = ">=1.19 <=1.19.4"
+deps.fabric_api = "0.87.2+1.19.4"
+deps.cloth_config = "10.1.135"
+deps.modmenu = "6.3.1"
+
+
+# 代表 1.18 ~ 1.18.2
+["1.18.2"]
+mod.mc_releases = ["1.18", "1.18.1", "1.18.2"]
+
+[fabric."1.18.2"]
+mod.mc_compat = ">=1.18 <=1.18.2"
+deps.fabric_api = "0.77.0+1.18.2"
+deps.cloth_config = "6.5.102"
+deps.modmenu = "3.2.5"
+
+
+# 代表 1.17 ~ 1.17.1
+["1.17.1"]
+mod.mc_releases = ["1.17", "1.17.1"]
+
+[fabric."1.17.1"]
+mod.mc_compat = ">=1.17 <=1.17.1"
+deps.fabric_api = "0.46.1+1.17"
+deps.cloth_config = "5.3.63"
+deps.modmenu = "2.0.17"
+
+
 ["26.1.2"]
 mod.mc_releases = ["26.1", "26.1.1", "26.1.2"]
 

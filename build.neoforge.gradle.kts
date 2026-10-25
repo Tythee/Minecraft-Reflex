@@ -69,6 +69,9 @@ tasks {
             register("name", "mod.name")
             register("version", "mod.version")
             register("minecraft", "mod.mc_compat")
+            // FancyModLoader 自己的版本号逐代递增 (20.6 → 3.x, 1.21.4 → 6.x, 26.x → 11~12.x)。
+            // 老版本上写死 [4,) 会让 20.6 (loader 3.0.45) 直接拒绝加载本 mod。
+            set("loader_range", if (sc.current.parsed < "1.21") "[3,)" else "[4,)")
         }
 
         filesMatching("META-INF/neoforge.mods.toml") { expand(props) }
