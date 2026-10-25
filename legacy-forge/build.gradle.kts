@@ -78,6 +78,9 @@ dependencies {
     implementation("org.spongepowered:mixin:0.8.5") { isTransitive = false }
 }
 
+/** 1.7.10 的 FML 包名/F3 结构都与 1.8.9+ 不同, 因此入口与 mixin 各有一套实现, 按版本二选一。 */
+val is1710 = (mc == "1.7.10")
+
 sourceSets {
     main {
         java.srcDirs(
@@ -91,6 +94,16 @@ sourceSets {
         java.exclude("io/tythee/mixin/MinecraftClientMixin.java")
         java.exclude("io/tythee/mixin/DebugOverlayMixin.java")
         java.exclude("io/tythee/config/ConfigScreen.java")
+
+        if (is1710) {
+            java.exclude("io/tythee/forge/ReflexClientForge.java")
+            java.exclude("io/tythee/mixin/DebugOverlayMixinLegacy.java")
+            // 1.8.9+ 的帧实现(渲染点带 long、呈递走 updateDisplay())在 1.7.10 上不成立
+            java.exclude("io/tythee/mixin/MinecraftClientMixinLegacy.java")
+        } else {
+            java.exclude("io/tythee/forge/ReflexClientForge1710.java")
+            java.exclude("io/tythee/mixin/MinecraftClientMixinLegacy1710.java")
+        }
     }
 }
 
@@ -124,7 +137,11 @@ tasks {
             expand(
                 mapOf(
                     "java" to "JAVA_8",
-                    "mixins_client" to """["MinecraftClientMixinLegacy","DebugOverlayMixinLegacy"]"""
+                    "mixins_client" to if (is1710) {
+                        """["MinecraftClientMixinLegacy1710"]"""
+                    } else {
+                        """["MinecraftClientMixinLegacy","DebugOverlayMixinLegacy"]"""
+                    }
                 )
             )
         }

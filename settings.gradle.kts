@@ -61,13 +61,8 @@ stonecutter {
         match("1.12.2", "forge")
         match("1.10.2", "forge")
         match("1.8.9", "forge")
-        // 1.7.10 待实现 —— 它需要一套独立的 legacy 实现(反编译已确认三处差异):
-        //   1) 入口在 cpw.mods.fml.*(不是 net.minecraftforge.fml.*)
-        //   2) 渲染提交点是 EntityRenderer#updateCameraAndRender(F)V —— 只有 float, 没有 long
-        //   3) 没有 Minecraft#updateDisplay()/GuiOverlayDebug: 呈递点在别的路径,
-        //      F3 左栏由 Minecraft#displayDebugInfo(long) 内部就地组列表并绘制, 需要另找注入方式
-        // 实现完成后取消注释, 并在 release.yml 的 legacy 步骤与发布矩阵里各加一行。
-        // match("1.7.10", "forge")
+        // 1.7.10 有独立的入口(cpw.mods.fml.*)与 mixin 实现(呈递点、渲染点形参都不同)
+        match("1.7.10", "forge")
         vcsVersion = "26.1.2-fabric"
     }
 }
